@@ -84,6 +84,26 @@ def init_db() -> None:
             conn.execute(_SCHEMA)
 
 
+def _row_to_movie(row: sqlite3.Row) -> MovieRead:
+    """Convert a sqlite3.Row into a MovieRead.
+
+    Two conversions happen here:
+    1. sqlite3.Row -> dict, because Pydantic's from_attributes=True uses
+       getattr() to read fields, and sqlite3.Row supports row["col"] but
+       NOT row.col. dict(row) gives us a mapping that model_validate
+       accepts directly.
+    2. ISO-8601 strings -> datetime objects, because we store datetimes
+       as TEXT in SQLite (no native datetime type). Pydantic will accept
+       a datetime here; it would also accept the string and parse it,
+       but doing it explicitly makes the conversion visible.
+    """
+
+    data = dict(row)
+    data["created_at"] = datetime.fromisoformat(data["created_at"])
+    data["updated_at"] = datetime.fromisoformat(data["updated_at"])
+    return MovieRead.model_validate(data)
+
+
 # Module-level state. Reset via reset_storage() in tests.
 _movies: dict[int, MovieRead] = {}
 _next_id: int = 1
