@@ -14,7 +14,7 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Annotated
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class MovieStatus(StrEnum):
@@ -47,6 +47,13 @@ class MovieUpdate(BaseModel):
     status: MovieStatus | None = None
     rating: Rating | None = None
     notes: Notes | None = None
+
+    @field_validator("title", mode="before")
+    @classmethod
+    def title_cannot_be_null(cls, v):
+        if v is None:
+            raise ValueError("title cannot be null; omit the field to leave it unchanged")
+        return v
 
 
 class MovieRead(BaseModel):

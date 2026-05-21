@@ -1,11 +1,22 @@
 """FastAPI application: movie watchlist CRUD endpoints."""
 
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, HTTPException, status
 
 from app import storage
 from app.models import MovieCreate, MovieRead, MovieUpdate
 
-app = FastAPI(title="Movie Watchlist", version="0.1.0")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup: ensure the database schema exists.
+    storage.init_db()
+    yield
+    # Shutdown: nothing to clean up for SQLite (connections are per-request).
+
+
+app = FastAPI(title="Movie Watchlist", version="0.1.0", lifespan=lifespan)
 
 
 @app.get("/health")
@@ -27,7 +38,7 @@ def list_movies() -> list[MovieRead]:
 def get_movie(movie_id: int) -> MovieRead:
     movie = storage.get(movie_id)
     if movie is None:
-        raise HTTPException(status_code=404, detail="Movie not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Movie not found")
     return movie
 
 
@@ -35,11 +46,11 @@ def get_movie(movie_id: int) -> MovieRead:
 def update_movie(movie_id: int, data: MovieUpdate) -> MovieRead:
     movie = storage.update(movie_id, data)
     if movie is None:
-        raise HTTPException(status_code=404, detail="Movie not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Movie not found")
     return movie
 
 
 @app.delete("/movies/{movie_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_movie(movie_id: int) -> None:
     if not storage.delete(movie_id):
-        raise HTTPException(status_code=404, detail="Movie not found")
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Movie not found")
