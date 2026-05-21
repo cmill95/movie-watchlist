@@ -1,18 +1,29 @@
 """
-In-memory storage for movies.
+SQLite storage for movies.
 
-This is a throwaway implementation — a module-level dict keyed by id, with
-a simple integer counter for id generation. It will be replaced with a real
-database (SQLite, then Postgres) later. The interface here is intentionally
-narrow so the swap is straightforward: routes call create/get/list/update/
-delete, and the implementation details stay hidden.
+Persists movies to a SQLite database file (path from MOVIES_DB_PATH env var,
+defaulting to ./movies.db). The interface is intentionally narrow — routes
+call create/get/list/update/delete, and the SQL details stay hidden behind
+this module. No ORM; stdlib sqlite3 only.
+
+Conventions used here:
+- A new connection is opened per call (no module-level connection). Simple
+  and thread-safe at the cost of a tiny connection-open overhead.
+- Writes are wrapped in `with conn:` for automatic commit/rollback.
+- Connections are wrapped in `contextlib.closing(...)` so they close on exit.
+- Datetimes are stored as ISO-8601 strings (SQLite has no datetime type).
+- The MovieStatus enum is stored as its string value.
+- Schema is created idempotently via init_db(), called from main.py's
+  lifespan handler at app startup and from the test fixture.
+
+Defense in depth: validation lives both in the Pydantic models (app/models.py)
+and as CHECK constraints in the schema below. When changing one, update the
+other.
 
 Known limitations:
-- State lives in module-level globals, so it does not survive process restart.
-- State is shared across tests unless explicitly cleared (handled by a pytest
-  fixture in tests/test_movies.py).
-- Not thread-safe. FastAPI's default sync routes don't share state across
-  threads in a way that would expose this, but it's worth knowing.
+- No connection pooling. Fine for SQLite; will need rethinking with Postgres.
+- No migrations — schema changes require deleting the DB file. Fine for now;
+  a real migration tool (Alembic, etc.) is a future concern.
 """
 
 import contextlib
@@ -22,8 +33,6 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from app.models import MovieCreate, MovieRead, MovieUpdate
-
-# --- SQLite scaffolding (not yet used by the public functions) ---
 
 _DEFAULT_DB_PATH = "movies.db"
 
@@ -76,8 +85,8 @@ def init_db() -> None:
     """Create the movies table if it doesn't exist.
 
     Idempotent — safe to call on every app startup and from test fixtures.
-    Called from the FastAPI lifespan handler in main.py (added later) and
-    from the test fixture (added later).
+    Called from the FastAPI lifespan handler in main.py and
+    from the test fixture (must add later).
     """
     with contextlib.closing(_connect()) as conn:
         with conn:
@@ -104,16 +113,12 @@ def _row_to_movie(row: sqlite3.Row) -> MovieRead:
     return MovieRead.model_validate(data)
 
 
-# Module-level state. Reset via reset_storage() in tests.
-_movies: dict[int, MovieRead] = {}
-_next_id: int = 1
-
-
 def reset_storage() -> None:
-    """Clear all movies and reset the id counter. For tests."""
-    global _next_id
-    _movies.clear()
-    _next_id = 1
+    """Clear all movies and reset the id sequence. For tests."""
+    with contextlib.closing(_connect()) as conn:
+        with conn:
+            conn.execute("DELETE FROM movies")
+            conn.execute("DELETE FROM sqlite_sequence WHERE name = 'movies'")
 
 
 def _now() -> datetime:
@@ -122,49 +127,86 @@ def _now() -> datetime:
 
 def create(data: MovieCreate) -> MovieRead:
     """Create a new movie. Server sets id, created_at, updated_at."""
-    global _next_id
-    now = _now()
-    movie = MovieRead(
-        id=_next_id,
-        title=data.title,
-        year=data.year,
-        status=data.status,
-        rating=data.rating,
-        notes=data.notes,
-        created_at=now,
-        updated_at=now,
-    )
-
-    _movies[_next_id] = movie
-    _next_id += 1
-    return movie
+    now = _now().isoformat()
+    with contextlib.closing(_connect()) as conn:
+        with conn:
+            cursor = conn.execute(
+                """
+                INSERT INTO movies (title, year, status, rating, notes, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    data.title,
+                    data.year,
+                    data.status.value,
+                    data.rating,
+                    data.notes,
+                    now,
+                    now,
+                ),
+            )
+            new_id = cursor.lastrowid
+            row = conn.execute("SELECT * FROM movies WHERE id = ?", (new_id,)).fetchone()
+    return _row_to_movie(row)
 
 
 def get(movie_id: int) -> MovieRead | None:
     """Return the movie with this id, or None if not found."""
-    return _movies.get(movie_id)
+    with contextlib.closing(_connect()) as conn:
+        row = conn.execute("SELECT * FROM movies WHERE id = ?", (movie_id,)).fetchone()
+    if row is None:
+        return None
+    return _row_to_movie(row)
 
 
 def list_all() -> list[MovieRead]:
-    """Return all movies, ordered by id ascending"""
-    return [_movies[i] for i in sorted(_movies)]
+    """Return all movies, ordered by id ascending."""
+    with contextlib.closing(_connect()) as conn:
+        rows = conn.execute("SELECT * FROM movies ORDER BY id ASC").fetchall()
+    return [_row_to_movie(row) for row in rows]
+
+
+# Columns that are safe to include in a dynamic UPDATE.
+# This is a whitelist — column names are interpolated into the SQL string,
+# so they must NEVER come from untrusted input. Keep this in sync with the
+# MovieUpdate model.
+_UPDATABLE_COLUMNS = {"title", "year", "status", "rating", "notes"}
 
 
 def update(movie_id: int, data: MovieUpdate) -> MovieRead | None:
     """Apply a partial update. Returns the updated movie, or None if not found."""
-    existing = _movies.get(movie_id)
-    if existing is None:
-        return None
-
     changes = data.model_dump(exclude_unset=True)
-    updated = existing.model_copy(update={**changes, "updated_at": _now()})
-    _movies[movie_id] = updated
-    return updated
+
+    # Serialize the enum to its string value. Other types (int, str, None)
+    # pass through to sqlite3 as-is.
+    if "status" in changes:
+        changes["status"] = changes["status"].value
+
+    # Always bump updated_at, even on an empty-body PATCH (matches existing behavior).
+    changes["updated_at"] = _now().isoformat()
+
+    # Build "col1 = ?, col2 = ?, ..." from the changed columns.
+    # Filter against the whitelist defensively — model_dump should only emit
+    # known fields, but treating the SQL string as untrusted is the defensive approach
+    columns = [c for c in changes if c in _UPDATABLE_COLUMNS or c == "updated_at"]
+    set_clause = ", ".join(f"{c} = ?" for c in columns)
+    values = [changes[c] for c in columns]
+
+    with contextlib.closing(_connect()) as conn:
+        with conn:
+            cursor = conn.execute(
+                f"UPDATE movies SET {set_clause} WHERE id = ?",
+                (*values, movie_id),
+            )
+            if cursor.rowcount == 0:
+                return None
+            row = conn.execute("SELECT * FROM movies WHERE id = ?", (movie_id,)).fetchone()
+    return _row_to_movie(row)
 
 
 def delete(movie_id: int) -> bool:
     """Delete the movie. Returns True if deleted, False if not found."""
-    if movie_id not in _movies:
-        return False
-    del _movies[movie_id]
-    return True
+    with contextlib.closing(_connect()) as conn:
+        with conn:
+            cursor = conn.execute("DELETE FROM movies WHERE id = ?", (movie_id,))
+    return cursor.rowcount > 0
