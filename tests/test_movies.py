@@ -1,10 +1,23 @@
 """pytest tests for Movie Watchlist endpoints"""
 
-import pytest
-from fastapi.testclient import TestClient
+import os
+import tempfile
 
-from app.main import app
-from app.storage import reset_storage
+import pytest
+
+# Set the DB path BEFORE importing anything from app.* so that any
+# import-time path resolution picks up the test path.
+_TEST_DB = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
+_TEST_DB.close()
+os.environ["MOVIES_DB_PATH"] = _TEST_DB.name
+
+from fastapi.testclient import TestClient  # noqa: E402
+
+from app.main import app  # noqa: E402
+from app.storage import init_db, reset_storage  # noqa: E402
+
+# Create schema once, then let reset_storage handle per-test cleanup.
+init_db()
 
 client = TestClient(app)
 
@@ -399,7 +412,7 @@ def test_patch_movie_year_wrong_type_returns_422():
 
 
 # Currently returns 200 because of the "title: Title | None = None" problem
-@pytest.mark.xfail(reason="PATCH null-handling semantics TBD")
+# @pytest.mark.xfail(reason="PATCH null-handling semantics TBD")
 def test_patch_movie_null_required_field_returns_422():
     target = client.post("/movies", json={"title": "Heat"}).json()
     response = client.patch(f"/movies/{target['id']}", json={"title": None})
