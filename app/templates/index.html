@@ -1,0 +1,28 @@
+
+{% extends "base.html" %}
+
+{% block content %}
+<h1>Movies</h1>
+<table>
+  <thead>
+    <tr>
+      <th>Title</th>
+      <th>Year</th>
+      <th>Status</th>
+      <th>Rating</th>
+      <th>Notes</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for movie in movies %}
+    <tr>
+      <td>{{ movie.title }}</td>
+      <td>{{ movie.year or "" }}</td>
+      <td>{{ movie.status }}</td>
+      <td>{{ movie.rating or "" }}</td>
+      <td>{{ movie.notes or "" }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

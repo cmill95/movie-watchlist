@@ -2,7 +2,10 @@
 
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException, status
+from fastapi import FastAPI, HTTPException, Request, status
+from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
 
 from app import storage
 from app.models import MovieCreate, MovieRead, MovieUpdate
@@ -17,6 +20,19 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Movie Watchlist", version="0.1.0", lifespan=lifespan)
+
+app.mount("/static", StaticFiles(directory="app/static"), name="static")
+templates = Jinja2Templates(directory="app/templates")
+
+
+@app.get("/", response_class=HTMLResponse)
+def index(request: Request):
+    movies = storage.list_all()
+    return templates.TemplateResponse(
+        request=request,
+        name="index.html",
+        context={"movies": movies},
+    )
 
 
 @app.get("/health")
