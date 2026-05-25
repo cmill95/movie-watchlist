@@ -1,26 +1,33 @@
-
 {% extends "base.html" %}
 
 {% block content %}
-<h1>Movies</h1>
+<header>
+  <h1>Movie Watchlist</h1>
+</header>
 
-{% include "_movie_form.html" %}
+<section aria-labelledby="add-heading">
+  <h2 id="add-heading">Add a movie</h2>
+  {% include "_movie_form.html" %}
+</section>
 
-<table>
-  <thead>
-    <tr>
-      <th>Title</th>
-      <th>Year</th>
-      <th>Status</th>
-      <th>Rating</th>
-      <th>Notes</th>
-      <th>Actions</th>
-    </tr>
-  </thead>
-  <tbody id="movie-table-body">
-    {% for movie in movies %}
-      {% include "_movie_row.html" %}
-    {% endfor %}
-  </tbody>
-</table>
+<section aria-labelledby="list-heading">
+  <h2 id="list-heading">Your movies</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Title</th>
+        <th>Year</th>
+        <th>Status</th>
+        <th>Rating</th>
+        <th>Notes</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody id="movie-table-body">
+      {% for movie in movies %}
+        {% include "_movie_row.html" %}
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
 {% endblock %}

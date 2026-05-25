@@ -22,7 +22,7 @@ class MovieStatus(StrEnum):
     WATCHED = "watched"
 
 
-# Resuable annotated types - defined once, used across models
+# Reusable annotated types - defined once, used across models
 Title = Annotated[str, Field(min_length=1, max_length=200)]
 Year = Annotated[int, Field(ge=1888, le=2100)]
 Rating = Annotated[int, Field(ge=1, le=10)]
@@ -30,7 +30,7 @@ Notes = Annotated[str, Field(min_length=1, max_length=2000)]
 
 
 class MovieCreate(BaseModel):
-    """Shape of the requeest body when creating a movie (POST /movies)."""
+    """Shape of the request body when creating a movie (POST /movies)."""
 
     title: Title
     year: Year | None = None
