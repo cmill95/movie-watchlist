@@ -38,7 +38,7 @@ def test_index_empty_returns_200_with_html_page():
 
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/html")
-    assert "Movies" in response.text
+    assert "Movie Watchlist" in response.text
     assert "add-movie-form" in response.text
 
 
