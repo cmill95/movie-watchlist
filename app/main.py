@@ -10,7 +10,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from app import storage
-from app.models import MovieCreate, MovieRead, MovieStatus, MovieUpdate
+from app.models import MovieCreate, MovieRead, MovieStatus, MovieUpdate, Notes, Rating, Title, Year
 
 
 @asynccontextmanager
@@ -74,11 +74,11 @@ def ui_delete_movie(movie_id: int):
 @app.post("/ui/movies")
 def ui_create_movie(
     request: Request,
-    title: Annotated[str, Form()],
-    year: Annotated[int | None, Form()] = None,
+    title: Annotated[Title, Form()],
+    year: Annotated[Year | None, Form()] = None,
     status: Annotated[MovieStatus, Form()] = MovieStatus.TO_WATCH,
-    rating: Annotated[int | None, Form()] = None,
-    notes: Annotated[str | None, Form()] = None,
+    rating: Annotated[Rating | None, Form()] = None,
+    notes: Annotated[Notes | None, Form()] = None,
 ):
     data = MovieCreate(
         title=title,
@@ -99,26 +99,18 @@ def ui_create_movie(
 def ui_update_movie(
     request: Request,
     movie_id: int,
-    title: Annotated[str, Form()],
-    year: Annotated[int | None, Form()] = None,
+    title: Annotated[Title, Form()],
+    year: Annotated[Year | None, Form()] = None,
     status: Annotated[MovieStatus, Form()] = MovieStatus.TO_WATCH,
-    rating: Annotated[int | None, Form()] = None,
-    notes: Annotated[str | None, Form()] = None,
+    rating: Annotated[Rating | None, Form()] = None,
+    notes: Annotated[Notes | None, Form()] = None,
 ):
-    data = MovieUpdate(
-        title=title,
-        year=year,
-        status=status,
-        rating=rating or None,
-        notes=notes or None,
-    )
+    data = MovieUpdate(title=title, year=year, status=status, rating=rating, notes=notes)
     movie = storage.update(movie_id, data)
     if movie is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Movie not found")
+        raise HTTPException(http_status.HTTP_404_NOT_FOUND, detail="Movie not found")
     return templates.TemplateResponse(
-        request=request,
-        name="_movie_row.html",
-        context={"movie": movie},
+        request=request, name="_movie_row.html", context={"movie": movie}
     )
 
 
