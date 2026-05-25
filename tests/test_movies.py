@@ -32,7 +32,7 @@ def _reset():
 # ============================================================================
 
 
-# ---- Happy Paths -----
+# ---- Happy Paths ----
 def test_index_empty_returns_200_with_html_page():
     response = client.get("/")
 
