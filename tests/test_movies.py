@@ -28,7 +28,368 @@ def _reset():
 
 
 # ============================================================================
-# Tests for POST /movies
+# Tests for GET / (HTML)
+# ============================================================================
+
+
+# ---- Happy Paths -----
+def test_index_empty_returns_200_with_html_page():
+    response = client.get("/")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/html")
+    assert "Movies" in response.text
+    assert "add-movie-form" in response.text
+
+
+def test_index_with_movies_renders_them():
+    client.post("/movies", json={"title": "The Matrix", "year": 1999})
+    client.post("/movies", json={"title": "Inception"})
+
+    response = client.get("/")
+
+    assert response.status_code == 200
+    assert "The Matrix" in response.text
+    assert "1999" in response.text
+    assert "Inception" in response.text
+
+
+# ============================================================================
+# Tests for GET /ui/movies/{id} (HTML)
+# ============================================================================
+
+
+# ---- Happy Paths ----
+def test_ui_get_movie_returns_200_with_row_html():
+    target = client.post("/movies", json={"title": "The Matrix"}).json()
+
+    response = client.get(f"/ui/movies/{target['id']}")
+
+    assert response.status_code == 200
+    assert str(target["id"]) in response.text
+    assert "The Matrix" in response.text
+
+
+def test_ui_get_movie_among_multiple_returns_200_with_row_html():
+    client.post("/movies", json={"title": "Heat"})
+    target = client.post("/movies", json={"title": "Inception"}).json()
+    client.post("/movies", json={"title": "The Matrix"})
+
+    response = client.get(f"/ui/movies/{target['id']}")
+
+    assert response.status_code == 200
+    assert "Inception" in response.text
+    assert "Heat" not in response.text
+    assert "The Matrix" not in response.text
+
+
+# ---- Sad Paths ----
+def test_ui_get_non_existent_movie_returns_404():
+    response = client.get("/ui/movies/9999")
+
+    assert response.status_code == 404
+    assert "Movie not found" in response.text
+
+
+# ============================================================================
+# Tests for GET /ui/movies/{id}/edit (HTML)
+# ============================================================================
+
+
+# ---- Happy Paths ----
+def test_ui_edit_movie_form_returns_200_with_form_html():
+    target = client.post(
+        "/movies",
+        json={
+            "title": "The Matrix",
+            "year": 1999,
+            "status": "watched",
+            "rating": 10,
+            "notes": "I liked the slow-mo!",
+        },
+    ).json()
+
+    response = client.get(f"/ui/movies/{target['id']}/edit")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/html")
+    assert "<input" in response.text  # response is the row-as-form fragment
+    # All current values appear pre-filled in the form.
+    assert "The Matrix" in response.text
+    assert "1999" in response.text
+    assert "10" in response.text
+    assert "I liked the slow-mo!" in response.text
+
+
+def test_ui_edit_movie_form_marks_current_status_selected():
+    target = client.post("/movies", json={"title": "Heat", "status": "watched"}).json()
+
+    response = client.get(f"/ui/movies/{target['id']}/edit")
+
+    assert response.status_code == 200
+    # The current status option is pre-selected in the dropdown.
+    assert 'value="watched"' in response.text
+    assert "selected" in response.text
+
+
+# ---- Sad Paths ----
+def test_ui_edit_nonexistent_movie_returns_404():
+    response = client.get("/ui/movies/9999/edit")
+    assert response.status_code == 404
+    assert "Movie not found" in response.text
+
+
+# ============================================================================
+# Tests for POST /ui/movies (HTML)
+# ============================================================================
+
+
+# ---- Happy Paths ----
+def test_ui_create_movie_returns_200_with_row_html():
+    response = client.post(
+        "/ui/movies",
+        data={
+            "title": "The Matrix",
+            "year": "1999",
+            "status": "watched",
+            "rating": "9",
+            "notes": "Keanu Reeves, Laurence Fishburne, and Carrie-Anne Moss",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/html")
+    assert "The Matrix" in response.text
+    assert "1999" in response.text
+    assert "<tr" in response.text  # response is a row fragment
+
+
+def test_ui_create_movie_persists_to_storage():
+    client.post("/ui/movies", data={"title": "The Matrix"})
+
+    # Verify via the JSON list endpoint — orthogonal to the HTML route under test.
+    movies = client.get("/movies").json()
+    assert len(movies) == 1
+    assert movies[0]["title"] == "The Matrix"
+
+
+# ---- Sad Paths ----
+def test_ui_create_movie_missing_title_returns_422():
+    response = client.post("/ui/movies", data={"year": "1995"})
+    assert response.status_code == 422
+
+
+def test_ui_create_movie_invalid_year_returns_422():
+    response = client.post("/ui/movies", data={"title": "The Matrix", "year": "1500"})
+    assert response.status_code == 422
+
+
+# ============================================================================
+# Tests for PATCH /ui/movies/{id} (HTML form update)
+# ============================================================================
+
+
+# ---- Happy Paths ----
+def test_ui_update_movie_returns_200_with_updated_row_html():
+    target = client.post("/movies", json={"title": "The maTeriX"}).json()
+
+    response = client.patch(
+        f"/ui/movies/{target['id']}",
+        data={
+            "title": "The Matrix",
+            "year": "1999",
+            "status": "watched",
+            "rating": "10",
+            "notes": "I liked the slow-mo!",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/html")
+    assert "<tr" in response.text  # response is the display-row fragment
+    assert "The Matrix" in response.text
+    assert "1999" in response.text
+
+
+def test_ui_update_movie_persists_to_storage():
+    target = client.post("/movies", json={"title": "The maTeriX"}).json()
+
+    client.patch(
+        f"/ui/movies/{target['id']}",
+        data={"title": "The Matrix", "status": "watched"},
+    )
+
+    updated = client.get(f"/movies/{target['id']}").json()
+    assert updated["title"] == "The Matrix"
+    assert updated["status"] == "watched"
+
+
+# ---- Sad Paths ----
+def test_ui_update_nonexistent_movie_returns_404():
+    response = client.patch(
+        "/ui/movies/9999",
+        data={"title": "The Matrix"},
+    )
+    assert response.status_code == 404
+
+
+def test_ui_update_movie_missing_title_returns_422():
+    target = client.post("/movies", json={"title": "Heat"}).json()
+    response = client.patch(f"/ui/movies/{target['id']}", data={"year": "1995"})
+    assert response.status_code == 422
+
+
+def test_ui_update_movie_invalid_year_returns_422():
+    target = client.post("/movies", json={"title": "Heat"}).json()
+    response = client.patch(
+        f"/ui/movies/{target['id']}",
+        data={"title": "Heat", "year": "1500"},
+    )
+    assert response.status_code == 422
+
+
+def test_ui_update_movie_invalid_status_returns_422():
+    target = client.post("/movies", json={"title": "Heat"}).json()
+    response = client.patch(
+        f"/ui/movies/{target['id']}",
+        data={"title": "Heat", "status": "watching"},
+    )
+    assert response.status_code == 422
+
+
+# ============================================================================
+# Tests for DELETE /ui/movies/{id} (HTML)
+# ============================================================================
+
+
+# ---- Happy Paths ----
+def test_ui_delete_movie_returns_200_with_empty_body():
+    target = client.post("/movies", json={"title": "The Matrix"}).json()
+
+    response = client.delete(f"/ui/movies/{target['id']}")
+
+    assert response.status_code == 200
+    assert response.text == ""
+
+
+def test_ui_delete_movie_removes_from_storage():
+    target = client.post("/movies", json={"title": "Heat"}).json()
+
+    client.delete(f"/ui/movies/{target['id']}")
+
+    assert client.get(f"/movies/{target['id']}").status_code == 404
+
+
+# ---- Sad Paths ----
+def test_ui_delete_nonexistent_movie_returns_404():
+    response = client.delete("/ui/movies/9999")
+    assert response.status_code == 404
+
+
+# ============================================================================
+# Tests for GET /health (JSON)
+# ============================================================================
+
+
+def test_health_returns_200():
+    response = client.get("/health")
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok"}
+
+
+# ============================================================================
+# Tests for GET /movies (JSON)
+# ============================================================================
+
+
+# ---- Happy Path ----
+def test_list_movies_empty_returns_200_with_empty_list():
+    response = client.get("/movies")
+    assert response.status_code == 200
+    assert response.json() == []
+
+
+def test_list_movies_single_returns_200_with_list():
+    client.post("/movies", json={"title": "Heat"})
+    response = client.get("/movies")
+    assert response.status_code == 200
+    body = response.json()
+    assert len(body) == 1
+    assert body[0]["title"] == "Heat"
+
+
+def test_list_movies_multiple_returns_200_with_list():
+    client.post("/movies", json={"title": "Heat"})
+    client.post("/movies", json={"title": "Inception"})
+    client.post("/movies", json={"title": "The Matrix"})
+
+    response = client.get("/movies")
+
+    assert response.status_code == 200
+
+    body = response.json()
+    assert len(body) == 3
+    titles = [m["title"] for m in body]
+    assert "Heat" in titles
+    assert "Inception" in titles
+    assert "The Matrix" in titles
+
+
+# ============================================================================
+# Tests for GET /movies/{id} (JSON)
+# ============================================================================
+
+
+# ---- Happy Paths ----
+def test_get_movie_returns_200_with_object():
+    target = client.post(
+        "/movies",
+        json={
+            "title": "The Matrix",
+            "year": 1999,
+            "status": "to_watch",
+            "rating": 10,
+            "notes": "I liked the slow-mo!",
+        },
+    ).json()
+
+    response = client.get(f"/movies/{target['id']}")
+
+    assert response.status_code == 200
+
+    body = response.json()
+    assert body["id"] == target["id"]
+    assert body["title"] == "The Matrix"
+    assert body["year"] == 1999
+    assert body["status"] == "to_watch"
+    assert body["rating"] == 10
+    assert body["notes"] == "I liked the slow-mo!"
+    assert body["created_at"] is not None
+    assert body["updated_at"] is not None
+
+
+def test_get_movie_with_multiple_returns_200_with_object():
+    client.post("/movies", json={"title": "Heat"})
+    target = client.post("/movies", json={"title": "Inception"}).json()
+    client.post("/movies", json={"title": "The Matrix"})
+
+    response = client.get(f"/movies/{target['id']}")
+
+    assert response.status_code == 200
+    assert response.json()["title"] == "Inception"
+
+
+# ---- Sad Paths ----
+def test_get_nonexistent_id_returns_404():
+
+    response = client.get("/movies/9999")
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Movie not found"
+
+
+# ============================================================================
+# Tests for POST /movies (JSON)
 # ============================================================================
 
 
@@ -208,109 +569,7 @@ def test_create_above_max_note_returns_422():
 
 
 # ============================================================================
-# Tests for GET /health
-# ============================================================================
-
-
-def test_health_returns_200():
-    response = client.get("/health")
-    assert response.status_code == 200
-    assert response.json() == {"status": "ok"}
-
-
-# ============================================================================
-# Tests for GET /movies
-# ============================================================================
-
-
-# ---- Happy Path ----
-def test_list_movies_empty_returns_200_with_empty_list():
-    response = client.get("/movies")
-    assert response.status_code == 200
-    assert response.json() == []
-
-
-def test_list_movies_single_returns_200_with_list():
-    client.post("/movies", json={"title": "Heat"})
-    response = client.get("/movies")
-    assert response.status_code == 200
-    body = response.json()
-    assert len(body) == 1
-    assert body[0]["title"] == "Heat"
-
-
-def test_list_movies_multiple_returns_200_with_list():
-    client.post("/movies", json={"title": "Heat"})
-    client.post("/movies", json={"title": "Inception"})
-    client.post("/movies", json={"title": "The Matrix"})
-
-    response = client.get("/movies")
-
-    assert response.status_code == 200
-
-    body = response.json()
-    assert len(body) == 3
-    titles = [m["title"] for m in body]
-    assert "Heat" in titles
-    assert "Inception" in titles
-    assert "The Matrix" in titles
-
-
-# ============================================================================
-# Tests for GET /movies/{id}
-# ============================================================================
-
-
-# ---- Happy Paths ----
-def test_get_movie_returns_200_with_object():
-    target = client.post(
-        "/movies",
-        json={
-            "title": "The Matrix",
-            "year": 1999,
-            "status": "to_watch",
-            "rating": 10,
-            "notes": "I liked the slow-mo!",
-        },
-    ).json()
-
-    response = client.get(f"/movies/{target['id']}")
-
-    assert response.status_code == 200
-
-    body = response.json()
-    assert body["id"] == target["id"]
-    assert body["title"] == "The Matrix"
-    assert body["year"] == 1999
-    assert body["status"] == "to_watch"
-    assert body["rating"] == 10
-    assert body["notes"] == "I liked the slow-mo!"
-    assert body["created_at"] is not None
-    assert body["updated_at"] is not None
-
-
-def test_get_movie_with_multiple_returns_200_with_object():
-    client.post("/movies", json={"title": "Heat"})
-    target = client.post("/movies", json={"title": "Inception"}).json()
-    client.post("/movies", json={"title": "The Matrix"})
-
-    response = client.get(f"/movies/{target['id']}")
-
-    assert response.status_code == 200
-    assert response.json()["title"] == "Inception"
-
-
-# ---- Sad Paths ----
-def test_get_nonexistent_id_returns_404():
-
-    response = client.get("/movies/9999")
-
-    assert response.status_code == 404
-    assert response.json()["detail"] == "Movie not found"
-
-
-# ============================================================================
-# Tests for PATCH /movies/{id}
+# Tests for PATCH /movies/{id} (JSON)
 # ============================================================================
 
 
@@ -420,7 +679,7 @@ def test_patch_movie_null_required_field_returns_422():
 
 
 # ============================================================================
-# Tests for DELETE /movies/{id}
+# Tests for DELETE /movies/{id} (JSON)
 # ============================================================================
 
 
