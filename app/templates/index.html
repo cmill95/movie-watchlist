@@ -1,0 +1,26 @@
+
+{% extends "base.html" %}
+
+{% block content %}
+<h1>Movies</h1>
+
+{% include "_movie_form.html" %}
+
+<table>
+  <thead>
+    <tr>
+      <th>Title</th>
+      <th>Year</th>
+      <th>Status</th>
+      <th>Rating</th>
+      <th>Notes</th>
+      <th>Actions</th>
+    </tr>
+  </thead>
+  <tbody id="movie-table-body">
+    {% for movie in movies %}
+      {% include "_movie_row.html" %}
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

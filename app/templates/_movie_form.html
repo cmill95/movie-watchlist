@@ -1,0 +1,15 @@
+<form id="add-movie-form"
+      hx-post="/ui/movies"
+      hx-target="#movie-table-body"
+      hx-swap="beforeend"
+      hx-on::after-request="if(event.detail.successful) this.reset()">
+  <input type="text" name="title" placeholder="Title" required maxlength="200">
+  <input type="number" name="year" placeholder="Year" min="1888" max="2100">
+  <select name="status">
+    <option value="to_watch">To watch</option>
+    <option value="watched">Watched</option>
+  </select>
+  <input type="number" name="rating" placeholder="Rating (1-10)" min="1" max="10">
+  <input type="text" name="notes" placeholder="Notes" minlength = "1" maxlength="2000">
+  <button type="submit">Add</button>
+</form>

@@ -1,0 +1,16 @@
+<tr id="movie-{{ movie.id }}">
+  <td>{{ movie.title }}</td>
+  <td>{{ movie.year or "" }}</td>
+  <td>{{ movie.status }}</td>
+  <td>{{ movie.rating or "" }}</td>
+  <td>{{ movie.notes or "" }}</td>
+  <td>
+  <button hx-get="/ui/movies/{{ movie.id }}/edit"
+          hx-target="#movie-{{ movie.id }}"
+          hx-swap="outerHTML">Edit</button>
+  <button hx-delete="/ui/movies/{{ movie.id }}"
+          hx-target="#movie-{{ movie.id }}"
+          hx-swap="outerHTML"
+          hx-confirm="Delete '{{ movie.title }}'?">Delete</button>
+</td>
+</tr>
