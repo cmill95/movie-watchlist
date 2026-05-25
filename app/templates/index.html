@@ -3,6 +3,9 @@
 
 {% block content %}
 <h1>Movies</h1>
+
+{% include "_movie_form.html" %}
+
 <table>
   <thead>
     <tr>
@@ -11,17 +14,12 @@
       <th>Status</th>
       <th>Rating</th>
       <th>Notes</th>
+      <th>Actions</th>
     </tr>
   </thead>
-  <tbody>
+  <tbody id="movie-table-body">
     {% for movie in movies %}
-    <tr>
-      <td>{{ movie.title }}</td>
-      <td>{{ movie.year or "" }}</td>
-      <td>{{ movie.status }}</td>
-      <td>{{ movie.rating or "" }}</td>
-      <td>{{ movie.notes or "" }}</td>
-    </tr>
+      {% include "_movie_row.html" %}
     {% endfor %}
   </tbody>
 </table>

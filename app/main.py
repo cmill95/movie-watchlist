@@ -1,14 +1,16 @@
 """FastAPI application: movie watchlist CRUD endpoints."""
 
 from contextlib import asynccontextmanager
+from typing import Annotated
 
-from fastapi import FastAPI, HTTPException, Request, status
-from fastapi.responses import HTMLResponse
+from fastapi import FastAPI, Form, HTTPException, Request
+from fastapi import status as http_status
+from fastapi.responses import HTMLResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from app import storage
-from app.models import MovieCreate, MovieRead, MovieUpdate
+from app.models import MovieCreate, MovieRead, MovieStatus, MovieUpdate
 
 
 @asynccontextmanager
@@ -25,6 +27,9 @@ app.mount("/static", StaticFiles(directory="app/static"), name="static")
 templates = Jinja2Templates(directory="app/templates")
 
 
+# --- HTML/HTMX Endpoints
+
+
 @app.get("/", response_class=HTMLResponse)
 def index(request: Request):
     movies = storage.list_all()
@@ -35,12 +40,97 @@ def index(request: Request):
     )
 
 
+@app.get("/ui/movies/{movie_id}", response_class=HTMLResponse)
+def ui_get_movie(request: Request, movie_id: int):
+    movie = storage.get(movie_id)
+    if movie is None:
+        raise HTTPException(http_status.HTTP_404_NOT_FOUND, detail="Movie not found")
+    return templates.TemplateResponse(
+        request=request,
+        name="_movie_row.html",
+        context={"movie": movie},
+    )
+
+
+@app.get("/ui/movies/{movie_id}/edit", response_class=HTMLResponse)
+def ui_edit_movie_form(request: Request, movie_id: int):
+    movie = storage.get(movie_id)
+    if movie is None:
+        raise HTTPException(http_status.HTTP_404_NOT_FOUND, detail="Movie not found")
+    return templates.TemplateResponse(
+        request=request,
+        name="_movie_row_edit.html",
+        context={"movie": movie},
+    )
+
+
+@app.delete("/ui/movies/{movie_id}")
+def ui_delete_movie(movie_id: int):
+    if not storage.delete(movie_id):
+        raise HTTPException(http_status.HTTP_404_NOT_FOUND, detail="Movie not found")
+    return Response(status_code=http_status.HTTP_200_OK)
+
+
+@app.post("/ui/movies")
+def ui_create_movie(
+    request: Request,
+    title: Annotated[str, Form()],
+    year: Annotated[int | None, Form()] = None,
+    status: Annotated[MovieStatus, Form()] = MovieStatus.TO_WATCH,
+    rating: Annotated[int | None, Form()] = None,
+    notes: Annotated[str | None, Form()] = None,
+):
+    data = MovieCreate(
+        title=title,
+        year=year,
+        status=status,
+        rating=rating,
+        notes=notes,
+    )
+    movie = storage.create(data)
+    return templates.TemplateResponse(
+        request=request,
+        name="_movie_row.html",
+        context={"movie": movie},
+    )
+
+
+@app.patch("/ui/movies/{movie_id}", response_class=HTMLResponse)
+def ui_update_movie(
+    request: Request,
+    movie_id: int,
+    title: Annotated[str, Form()],
+    year: Annotated[int | None, Form()] = None,
+    status: Annotated[MovieStatus, Form()] = MovieStatus.TO_WATCH,
+    rating: Annotated[int | None, Form()] = None,
+    notes: Annotated[str | None, Form()] = None,
+):
+    data = MovieUpdate(
+        title=title,
+        year=year,
+        status=status,
+        rating=rating or None,
+        notes=notes or None,
+    )
+    movie = storage.update(movie_id, data)
+    if movie is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Movie not found")
+    return templates.TemplateResponse(
+        request=request,
+        name="_movie_row.html",
+        context={"movie": movie},
+    )
+
+
+# ---- JSON Endpoints
+
+
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
-@app.post("/movies", response_model=MovieRead, status_code=status.HTTP_201_CREATED)
+@app.post("/movies", response_model=MovieRead, status_code=http_status.HTTP_201_CREATED)
 def create_movie(data: MovieCreate) -> MovieRead:
     return storage.create(data)
 
@@ -54,7 +144,7 @@ def list_movies() -> list[MovieRead]:
 def get_movie(movie_id: int) -> MovieRead:
     movie = storage.get(movie_id)
     if movie is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Movie not found")
+        raise HTTPException(status_code=http_status.HTTP_404_NOT_FOUND, detail="Movie not found")
     return movie
 
 
@@ -62,11 +152,11 @@ def get_movie(movie_id: int) -> MovieRead:
 def update_movie(movie_id: int, data: MovieUpdate) -> MovieRead:
     movie = storage.update(movie_id, data)
     if movie is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Movie not found")
+        raise HTTPException(status_code=http_status.HTTP_404_NOT_FOUND, detail="Movie not found")
     return movie
 
 
-@app.delete("/movies/{movie_id}", status_code=status.HTTP_204_NO_CONTENT)
+@app.delete("/movies/{movie_id}", status_code=http_status.HTTP_204_NO_CONTENT)
 def delete_movie(movie_id: int) -> None:
     if not storage.delete(movie_id):
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Movie not found")
+        raise HTTPException(http_status.HTTP_404_NOT_FOUND, detail="Movie not found")
