@@ -1,30 +1,5 @@
 """pytest tests for Movie Watchlist endpoints"""
 
-import os
-import tempfile
-
-import pytest
-
-# Create a unique temp file, close the FD immediately, keep just the path.
-_fd, _TEST_DB_PATH = tempfile.mkstemp(suffix=".db")
-os.close(_fd)
-os.environ["MOVIES_DB_PATH"] = _TEST_DB_PATH
-
-from fastapi.testclient import TestClient  # noqa: E402
-
-from app.main import app  # noqa: E402
-from app.storage import init_db, reset_storage  # noqa: E402
-
-# Create schema once, then let reset_storage handle per-test cleanup.
-init_db()
-
-client = TestClient(app)
-
-
-@pytest.fixture(autouse=True)
-def _reset():
-    reset_storage()
-
 
 # ============================================================================
 # Tests for GET / (HTML)
@@ -32,7 +7,7 @@ def _reset():
 
 
 # ---- Happy Paths ----
-def test_index_empty_returns_200_with_html_page():
+def test_index_empty_returns_200_with_html_page(client):
     response = client.get("/")
 
     assert response.status_code == 200
@@ -41,7 +16,7 @@ def test_index_empty_returns_200_with_html_page():
     assert "add-movie-form" in response.text
 
 
-def test_index_with_movies_renders_them():
+def test_index_with_movies_renders_them(client):
     client.post("/movies", json={"title": "The Matrix", "year": 1999})
     client.post("/movies", json={"title": "Inception"})
 
@@ -59,7 +34,7 @@ def test_index_with_movies_renders_them():
 
 
 # ---- Happy Paths ----
-def test_ui_get_movie_returns_200_with_row_html():
+def test_ui_get_movie_returns_200_with_row_html(client):
     target = client.post("/movies", json={"title": "The Matrix"}).json()
 
     response = client.get(f"/ui/movies/{target['id']}")
@@ -69,7 +44,7 @@ def test_ui_get_movie_returns_200_with_row_html():
     assert "The Matrix" in response.text
 
 
-def test_ui_get_movie_among_multiple_returns_200_with_row_html():
+def test_ui_get_movie_among_multiple_returns_200_with_row_html(client):
     client.post("/movies", json={"title": "Heat"})
     target = client.post("/movies", json={"title": "Inception"}).json()
     client.post("/movies", json={"title": "The Matrix"})
@@ -83,7 +58,7 @@ def test_ui_get_movie_among_multiple_returns_200_with_row_html():
 
 
 # ---- Sad Paths ----
-def test_ui_get_non_existent_movie_returns_404():
+def test_ui_get_non_existent_movie_returns_404(client):
     response = client.get("/ui/movies/9999")
 
     assert response.status_code == 404
@@ -96,7 +71,7 @@ def test_ui_get_non_existent_movie_returns_404():
 
 
 # ---- Happy Paths ----
-def test_ui_edit_movie_form_returns_200_with_form_html():
+def test_ui_edit_movie_form_returns_200_with_form_html(client):
     target = client.post(
         "/movies",
         json={
@@ -120,7 +95,7 @@ def test_ui_edit_movie_form_returns_200_with_form_html():
     assert "I liked the slow-mo!" in response.text
 
 
-def test_ui_edit_movie_form_marks_current_status_selected():
+def test_ui_edit_movie_form_marks_current_status_selected(client):
     target = client.post("/movies", json={"title": "Heat", "status": "watched"}).json()
 
     response = client.get(f"/ui/movies/{target['id']}/edit")
@@ -132,7 +107,7 @@ def test_ui_edit_movie_form_marks_current_status_selected():
 
 
 # ---- Sad Paths ----
-def test_ui_edit_nonexistent_movie_returns_404():
+def test_ui_edit_nonexistent_movie_returns_404(client):
     response = client.get("/ui/movies/9999/edit")
     assert response.status_code == 404
     assert "Movie not found" in response.text
@@ -144,7 +119,7 @@ def test_ui_edit_nonexistent_movie_returns_404():
 
 
 # ---- Happy Paths ----
-def test_ui_create_movie_returns_200_with_row_html():
+def test_ui_create_movie_returns_200_with_row_html(client):
     response = client.post(
         "/ui/movies",
         data={
@@ -163,7 +138,7 @@ def test_ui_create_movie_returns_200_with_row_html():
     assert "<tr" in response.text  # response is a row fragment
 
 
-def test_ui_create_movie_persists_to_storage():
+def test_ui_create_movie_persists_to_storage(client):
     client.post("/ui/movies", data={"title": "The Matrix"})
 
     # Verify via the JSON list endpoint — orthogonal to the HTML route under test.
@@ -173,12 +148,12 @@ def test_ui_create_movie_persists_to_storage():
 
 
 # ---- Sad Paths ----
-def test_ui_create_movie_missing_title_returns_422():
+def test_ui_create_movie_missing_title_returns_422(client):
     response = client.post("/ui/movies", data={"year": "1995"})
     assert response.status_code == 422
 
 
-def test_ui_create_movie_invalid_year_returns_422():
+def test_ui_create_movie_invalid_year_returns_422(client):
     response = client.post("/ui/movies", data={"title": "The Matrix", "year": "1500"})
     assert response.status_code == 422
 
@@ -189,7 +164,7 @@ def test_ui_create_movie_invalid_year_returns_422():
 
 
 # ---- Happy Paths ----
-def test_ui_update_movie_returns_200_with_updated_row_html():
+def test_ui_update_movie_returns_200_with_updated_row_html(client):
     target = client.post("/movies", json={"title": "The maTeriX"}).json()
 
     response = client.patch(
@@ -210,7 +185,7 @@ def test_ui_update_movie_returns_200_with_updated_row_html():
     assert "1999" in response.text
 
 
-def test_ui_update_movie_persists_to_storage():
+def test_ui_update_movie_persists_to_storage(client):
     target = client.post("/movies", json={"title": "The maTeriX"}).json()
 
     client.patch(
@@ -224,7 +199,7 @@ def test_ui_update_movie_persists_to_storage():
 
 
 # ---- Sad Paths ----
-def test_ui_update_nonexistent_movie_returns_404():
+def test_ui_update_nonexistent_movie_returns_404(client):
     response = client.patch(
         "/ui/movies/9999",
         data={"title": "The Matrix"},
@@ -232,13 +207,13 @@ def test_ui_update_nonexistent_movie_returns_404():
     assert response.status_code == 404
 
 
-def test_ui_update_movie_missing_title_returns_422():
+def test_ui_update_movie_missing_title_returns_422(client):
     target = client.post("/movies", json={"title": "Heat"}).json()
     response = client.patch(f"/ui/movies/{target['id']}", data={"year": "1995"})
     assert response.status_code == 422
 
 
-def test_ui_update_movie_invalid_year_returns_422():
+def test_ui_update_movie_invalid_year_returns_422(client):
     target = client.post("/movies", json={"title": "Heat"}).json()
     response = client.patch(
         f"/ui/movies/{target['id']}",
@@ -247,7 +222,7 @@ def test_ui_update_movie_invalid_year_returns_422():
     assert response.status_code == 422
 
 
-def test_ui_update_movie_invalid_status_returns_422():
+def test_ui_update_movie_invalid_status_returns_422(client):
     target = client.post("/movies", json={"title": "Heat"}).json()
     response = client.patch(
         f"/ui/movies/{target['id']}",
@@ -262,7 +237,7 @@ def test_ui_update_movie_invalid_status_returns_422():
 
 
 # ---- Happy Paths ----
-def test_ui_delete_movie_returns_200_with_empty_body():
+def test_ui_delete_movie_returns_200_with_empty_body(client):
     target = client.post("/movies", json={"title": "The Matrix"}).json()
 
     response = client.delete(f"/ui/movies/{target['id']}")
@@ -271,7 +246,7 @@ def test_ui_delete_movie_returns_200_with_empty_body():
     assert response.text == ""
 
 
-def test_ui_delete_movie_removes_from_storage():
+def test_ui_delete_movie_removes_from_storage(client):
     target = client.post("/movies", json={"title": "Heat"}).json()
 
     client.delete(f"/ui/movies/{target['id']}")
@@ -280,7 +255,7 @@ def test_ui_delete_movie_removes_from_storage():
 
 
 # ---- Sad Paths ----
-def test_ui_delete_nonexistent_movie_returns_404():
+def test_ui_delete_nonexistent_movie_returns_404(client):
     response = client.delete("/ui/movies/9999")
     assert response.status_code == 404
 
@@ -290,7 +265,7 @@ def test_ui_delete_nonexistent_movie_returns_404():
 # ============================================================================
 
 
-def test_health_returns_200():
+def test_health_returns_200(client):
     response = client.get("/health")
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
@@ -302,13 +277,13 @@ def test_health_returns_200():
 
 
 # ---- Happy Path ----
-def test_list_movies_empty_returns_200_with_empty_list():
+def test_list_movies_empty_returns_200_with_empty_list(client):
     response = client.get("/movies")
     assert response.status_code == 200
     assert response.json() == []
 
 
-def test_list_movies_single_returns_200_with_list():
+def test_list_movies_single_returns_200_with_list(client):
     client.post("/movies", json={"title": "Heat"})
     response = client.get("/movies")
     assert response.status_code == 200
@@ -317,7 +292,7 @@ def test_list_movies_single_returns_200_with_list():
     assert body[0]["title"] == "Heat"
 
 
-def test_list_movies_multiple_returns_200_with_list():
+def test_list_movies_multiple_returns_200_with_list(client):
     client.post("/movies", json={"title": "Heat"})
     client.post("/movies", json={"title": "Inception"})
     client.post("/movies", json={"title": "The Matrix"})
@@ -340,7 +315,7 @@ def test_list_movies_multiple_returns_200_with_list():
 
 
 # ---- Happy Paths ----
-def test_get_movie_returns_200_with_object():
+def test_get_movie_returns_200_with_object(client):
     target = client.post(
         "/movies",
         json={
@@ -367,7 +342,7 @@ def test_get_movie_returns_200_with_object():
     assert body["updated_at"] is not None
 
 
-def test_get_movie_with_multiple_returns_200_with_object():
+def test_get_movie_with_multiple_returns_200_with_object(client):
     client.post("/movies", json={"title": "Heat"})
     target = client.post("/movies", json={"title": "Inception"}).json()
     client.post("/movies", json={"title": "The Matrix"})
@@ -379,7 +354,7 @@ def test_get_movie_with_multiple_returns_200_with_object():
 
 
 # ---- Sad Paths ----
-def test_get_nonexistent_id_returns_404():
+def test_get_nonexistent_id_returns_404(client):
 
     response = client.get("/movies/9999")
 
@@ -393,7 +368,7 @@ def test_get_nonexistent_id_returns_404():
 
 
 # ---- Happy Paths ----
-def test_create_minimal_movie_returns_201_with_object():
+def test_create_minimal_movie_returns_201_with_object(client):
     response = client.post("/movies", json={"title": "The Matrix"})
 
     assert response.status_code == 201
@@ -409,7 +384,7 @@ def test_create_minimal_movie_returns_201_with_object():
     assert body["updated_at"] is not None
 
 
-def test_create_full_movie_returns_201_with_object():
+def test_create_full_movie_returns_201_with_object(client):
     response = client.post(
         "/movies",
         json={
@@ -434,7 +409,7 @@ def test_create_full_movie_returns_201_with_object():
     assert body["updated_at"] is not None
 
 
-def test_create_mixed_returns_201_with_object():
+def test_create_mixed_returns_201_with_object(client):
     response = client.post(
         "/movies",
         json={
@@ -457,7 +432,7 @@ def test_create_mixed_returns_201_with_object():
     assert body["updated_at"] is not None
 
 
-def test_create_unknown_field_201_with_object():
+def test_create_unknown_field_201_with_object(client):
     response = client.post("/movies", json={"title": "The Matrix", "id": 5})
 
     # id is set by the system, user-added id field is ignored, success
@@ -479,89 +454,89 @@ def test_create_unknown_field_201_with_object():
 
 
 # - Title
-def test_create_empty_returns_422():
+def test_create_empty_returns_422(client):
     response = client.post("/movies", json={})
 
     assert response.status_code == 422
 
 
-def test_create_empty_title_returns_422():
+def test_create_empty_title_returns_422(client):
     response = client.post("/movies", json={"title": ""})
 
     assert response.status_code == 422
 
 
-def test_create_above_max_title_returns_422():
+def test_create_above_max_title_returns_422(client):
     response = client.post("/movies", json={"title": "a" * 201})
 
     assert response.status_code == 422
 
 
-def test_create_none_title_returns_422():
+def test_create_none_title_returns_422(client):
     response = client.post("/movies", json={"title": None})
 
     assert response.status_code == 422
 
 
 # - Year
-def test_create_below_min_year_returns_422():
+def test_create_below_min_year_returns_422(client):
     response = client.post("/movies", json={"title": "The Matrix", "year": 1887})
 
     assert response.status_code == 422
 
 
-def test_create_above_max_year_returns_422():
+def test_create_above_max_year_returns_422(client):
     response = client.post("/movies", json={"title": "The Matrix", "year": 2101})
 
     assert response.status_code == 422
 
 
-def test_create_string_year_returns_422():
+def test_create_string_year_returns_422(client):
     response = client.post("/movies", json={"title": "The Matrix", "year": "Nineteen ninety-nine"})
 
     assert response.status_code == 422
 
 
 # - Status
-def test_create_bad_status_str_returns_422():
+def test_create_bad_status_str_returns_422(client):
     response = client.post("/movies", json={"title": "The Matrix", "status": "watching"})
 
     assert response.status_code == 422
 
 
-def test_create_uppercase_status_returns_422():
+def test_create_uppercase_status_returns_422(client):
     response = client.post("/movies", json={"title": "The Matrix", "status": "WATCHED"})
 
     assert response.status_code == 422
 
 
 # - Rating
-def test_create_below_min_rating_returns_422():
+def test_create_below_min_rating_returns_422(client):
     response = client.post("/movies", json={"title": "The Matrix", "rating": 0})
 
     assert response.status_code == 422
 
 
-def test_create_above_max_rating_returns_422():
+def test_create_above_max_rating_returns_422(client):
     response = client.post("/movies", json={"title": "The Matrix", "rating": 11})
 
     assert response.status_code == 422
 
 
-def test_create_str_rating_returns_422():
+def test_create_str_rating_returns_422(client):
     response = client.post("/movies", json={"title": "The Matrix", "rating": "ten"})
 
     assert response.status_code == 422
 
 
 # - Notes
-def test_create_below_min_note_returns_422():
+def test_create_below_min_note_returns_422(client):
     response = client.post("/movies", json={"title": "The Matrix", "notes": ""})
 
     assert response.status_code == 422
 
 
-def test_create_above_max_note_returns_422():
+def test_create_above_max_note_returns_422(client):
     response = client.post("/movies", json={"title": "The Matrix", "notes": "a" * 2001})
 
     assert response.status_code == 422
@@ -573,7 +548,7 @@ def test_create_above_max_note_returns_422():
 
 
 # ---- Happy Path ----
-def test_patch_movie_updates_only_specified_fields_returns_200_with_object():
+def test_patch_movie_updates_only_specified_fields_returns_200_with_object(client):
     target = client.post(
         "/movies",
         json={
@@ -599,7 +574,7 @@ def test_patch_movie_updates_only_specified_fields_returns_200_with_object():
     assert body["updated_at"] != target["updated_at"]
 
 
-def test_patch_movie_with_empty_body_returns_200_unchanged():
+def test_patch_movie_with_empty_body_returns_200_unchanged(client):
     target = client.post(
         "/movies", json={"title": "The Matrix", "year": 1999, "rating": 10, "notes": "great"}
     ).json()
@@ -616,7 +591,7 @@ def test_patch_movie_with_empty_body_returns_200_unchanged():
     assert body["created_at"] == target["created_at"]
 
 
-def test_patch_movie_unknown_field_returns_200_with_object_unchanged():
+def test_patch_movie_unknown_field_returns_200_with_object_unchanged(client):
     target = client.post("/movies", json={"title": "Heat"}).json()
     response = client.patch(f"/movies/{target['id']}", json={"unknown_field": "x"})
 
@@ -627,43 +602,43 @@ def test_patch_movie_unknown_field_returns_200_with_object_unchanged():
 
 
 # ---- Sad Paths ----
-def test_patch_nonexistent_movie_returns_404():
+def test_patch_nonexistent_movie_returns_404(client):
     response = client.patch("/movies/9999", json={"title": "The Matrix"})
 
     assert response.status_code == 404
     assert response.json()["detail"] == "Movie not found"
 
 
-def test_patch_movie_with_non_integer_id_returns_422():
+def test_patch_movie_with_non_integer_id_returns_422(client):
     response = client.patch("/movies/abc", json={"title": "The Matrix"})
     assert response.status_code == 422
 
 
-def test_patch_movie_empty_title_returns_422():
+def test_patch_movie_empty_title_returns_422(client):
     target = client.post("/movies", json={"title": "Heat"}).json()
     response = client.patch(f"/movies/{target['id']}", json={"title": ""})
     assert response.status_code == 422
 
 
-def test_patch_movie_year_out_of_range_returns_422():
+def test_patch_movie_year_out_of_range_returns_422(client):
     target = client.post("/movies", json={"title": "Heat"}).json()
     response = client.patch(f"/movies/{target['id']}", json={"year": 2101})
     assert response.status_code == 422
 
 
-def test_patch_movie_invalid_status_returns_422():
+def test_patch_movie_invalid_status_returns_422(client):
     target = client.post("/movies", json={"title": "Heat"}).json()
     response = client.patch(f"/movies/{target['id']}", json={"status": "watching"})
     assert response.status_code == 422
 
 
-def test_patch_movie_rating_out_of_range_returns_422():
+def test_patch_movie_rating_out_of_range_returns_422(client):
     target = client.post("/movies", json={"title": "Heat"}).json()
     response = client.patch(f"/movies/{target['id']}", json={"rating": 11})
     assert response.status_code == 422
 
 
-def test_patch_movie_year_wrong_type_returns_422():
+def test_patch_movie_year_wrong_type_returns_422(client):
     target = client.post("/movies", json={"title": "Heat"}).json()
     response = client.patch(f"/movies/{target['id']}", json={"year": "nineteen"})
     assert response.status_code == 422
@@ -671,7 +646,7 @@ def test_patch_movie_year_wrong_type_returns_422():
 
 # Currently returns 200 because of the "title: Title | None = None" problem
 # @pytest.mark.xfail(reason="PATCH null-handling semantics TBD")
-def test_patch_movie_null_required_field_returns_422():
+def test_patch_movie_null_required_field_returns_422(client):
     target = client.post("/movies", json={"title": "Heat"}).json()
     response = client.patch(f"/movies/{target['id']}", json={"title": None})
     assert response.status_code == 422
@@ -683,7 +658,7 @@ def test_patch_movie_null_required_field_returns_422():
 
 
 # ---- Happy paths ----
-def test_delete_movie_returns_204():
+def test_delete_movie_returns_204(client):
     target = client.post("/movies", json={"title": "The Matrix"}).json()
 
     response = client.delete(f"/movies/{target['id']}")
@@ -694,7 +669,7 @@ def test_delete_movie_returns_204():
     assert response.content == b""
 
 
-def test_delete_movie_actually_removes_it():
+def test_delete_movie_actually_removes_it(client):
     target = client.post("/movies", json={"title": "The Matrix"}).json()
 
     client.delete(f"/movies/{target['id']}")
@@ -703,7 +678,7 @@ def test_delete_movie_actually_removes_it():
     assert follow_up.status_code == 404
 
 
-def test_delete_movie_does_not_affect_other_movies():
+def test_delete_movie_does_not_affect_other_movies(client):
     keep = client.post("/movies", json={"title": "Heat"}).json()
     target = client.post("/movies", json={"title": "The Matrix"}).json()
 
@@ -715,20 +690,20 @@ def test_delete_movie_does_not_affect_other_movies():
 
 
 # ---- Sad paths ----
-def test_delete_nonexistent_movie_returns_404():
+def test_delete_nonexistent_movie_returns_404(client):
     response = client.delete("/movies/9999")
 
     assert response.status_code == 404
     assert response.json()["detail"] == "Movie not found"
 
 
-def test_delete_movie_with_non_integer_id_returns_422():
+def test_delete_movie_with_non_integer_id_returns_422(client):
     response = client.delete("/movies/abc")
 
     assert response.status_code == 422
 
 
-def test_delete_already_deleted_movie_returns_404():
+def test_delete_already_deleted_movie_returns_404(client):
     target = client.post("/movies", json={"title": "The Matrix"}).json()
     client.delete(f"/movies/{target['id']}")
 
