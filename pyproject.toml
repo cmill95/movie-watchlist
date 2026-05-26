@@ -22,7 +22,13 @@ line-length = 100
 target-version = "py312"
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "B", "UP"]
+select = [
+    # Baseline
+    "E", "F", "I", "B", "UP", 
+    # Additions
+    "W", "C4", "PIE", "RUF", "SIM", "PTH", "FURB", "A", "T10",
+    "DTZ", "PT", "C90"
+]
 
 [tool.ruff.format]
 quote-style = "double"

@@ -5,11 +5,10 @@ import tempfile
 
 import pytest
 
-# Set the DB path BEFORE importing anything from app.* so that any
-# import-time path resolution picks up the test path.
-_TEST_DB = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
-_TEST_DB.close()
-os.environ["MOVIES_DB_PATH"] = _TEST_DB.name
+# Create a unique temp file, close the FD immediately, keep just the path.
+_fd, _TEST_DB_PATH = tempfile.mkstemp(suffix=".db")
+os.close(_fd)
+os.environ["MOVIES_DB_PATH"] = _TEST_DB_PATH
 
 from fastapi.testclient import TestClient  # noqa: E402
 

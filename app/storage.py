@@ -88,9 +88,8 @@ def init_db() -> None:
     Called from the FastAPI lifespan handler in main.py and
     from the test fixture (must add later).
     """
-    with contextlib.closing(_connect()) as conn:
-        with conn:
-            conn.execute(_SCHEMA)
+    with contextlib.closing(_connect()) as conn, conn:
+        conn.execute(_SCHEMA)
 
 
 def _row_to_movie(row: sqlite3.Row) -> MovieRead:
@@ -115,10 +114,9 @@ def _row_to_movie(row: sqlite3.Row) -> MovieRead:
 
 def reset_storage() -> None:
     """Clear all movies and reset the id sequence. For tests."""
-    with contextlib.closing(_connect()) as conn:
-        with conn:
-            conn.execute("DELETE FROM movies")
-            conn.execute("DELETE FROM sqlite_sequence WHERE name = 'movies'")
+    with contextlib.closing(_connect()) as conn, conn:
+        conn.execute("DELETE FROM movies")
+        conn.execute("DELETE FROM sqlite_sequence WHERE name = 'movies'")
 
 
 def _now() -> datetime:
@@ -128,25 +126,24 @@ def _now() -> datetime:
 def create(data: MovieCreate) -> MovieRead:
     """Create a new movie. Server sets id, created_at, updated_at."""
     now = _now().isoformat()
-    with contextlib.closing(_connect()) as conn:
-        with conn:
-            cursor = conn.execute(
-                """
+    with contextlib.closing(_connect()) as conn, conn:
+        cursor = conn.execute(
+            """
                 INSERT INTO movies (title, year, status, rating, notes, created_at, updated_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?)
                 """,
-                (
-                    data.title,
-                    data.year,
-                    data.status.value,
-                    data.rating,
-                    data.notes,
-                    now,
-                    now,
-                ),
-            )
-            new_id = cursor.lastrowid
-            row = conn.execute("SELECT * FROM movies WHERE id = ?", (new_id,)).fetchone()
+            (
+                data.title,
+                data.year,
+                data.status.value,
+                data.rating,
+                data.notes,
+                now,
+                now,
+            ),
+        )
+        new_id = cursor.lastrowid
+        row = conn.execute("SELECT * FROM movies WHERE id = ?", (new_id,)).fetchone()
     return _row_to_movie(row)
 
 
@@ -192,21 +189,19 @@ def update(movie_id: int, data: MovieUpdate) -> MovieRead | None:
     set_clause = ", ".join(f"{c} = ?" for c in columns)
     values = [changes[c] for c in columns]
 
-    with contextlib.closing(_connect()) as conn:
-        with conn:
-            cursor = conn.execute(
-                f"UPDATE movies SET {set_clause} WHERE id = ?",
-                (*values, movie_id),
-            )
-            if cursor.rowcount == 0:
-                return None
-            row = conn.execute("SELECT * FROM movies WHERE id = ?", (movie_id,)).fetchone()
+    with contextlib.closing(_connect()) as conn, conn:
+        cursor = conn.execute(
+            f"UPDATE movies SET {set_clause} WHERE id = ?",
+            (*values, movie_id),
+        )
+        if cursor.rowcount == 0:
+            return None
+        row = conn.execute("SELECT * FROM movies WHERE id = ?", (movie_id,)).fetchone()
     return _row_to_movie(row)
 
 
 def delete(movie_id: int) -> bool:
     """Delete the movie. Returns True if deleted, False if not found."""
-    with contextlib.closing(_connect()) as conn:
-        with conn:
-            cursor = conn.execute("DELETE FROM movies WHERE id = ?", (movie_id,))
+    with contextlib.closing(_connect()) as conn, conn:
+        cursor = conn.execute("DELETE FROM movies WHERE id = ?", (movie_id,))
     return cursor.rowcount > 0
