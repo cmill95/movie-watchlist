@@ -41,15 +41,33 @@ jobs:
 
       - name: Run pytest
         run: uv run pytest
+
+  pre-commit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+      - run: uv sync --all-extras --dev
+      - run: uv run pre-commit run --all-files
+
+
+
+
   ci-passed:
-    needs: lint-and-test
+    needs: [pre-commit, lint-and-test]
     if: always()
     runs-on: ubuntu-latest
     steps:
-      - name: Check matrix result
+      - name: Check pre-commit and matrix results
         run: |
-          if [[ "${{ needs.lint-and-test.result }}" != "success" ]]; then
-            echo "Upstream matrix jobs did not all succeed"
+          if [[ "${{ needs.pre-commit.result }}" != "success" ]] || \
+             [[ "${{ needs.lint-and-test.result }}" != "success" ]]; then
+            echo "One or more upstream jobs did not succeed"
             exit 1
           fi
-          echo "All matrix jobs passed"
+          echo "All jobs passed"
