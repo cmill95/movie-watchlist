@@ -26,7 +26,7 @@ select = [
     # Baseline
     "E", "F", "I", "B", "UP", 
     # Additions
-    "W", "C4", "PIE", "RUF", "SIM", "PTH", "FURB"
+    "W", "C4", "PIE", "RUF", "SIM", "PTH", "FURB", "A"
 ]
 
 [tool.ruff.format]
