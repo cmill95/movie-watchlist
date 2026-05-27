@@ -35,4 +35,4 @@ select = [
 quote-style = "double"
 
 [tool.pytest.ini_options]
-addopts = "--cov=app --cov-branch --cov-report=term-missing --cov-report=xml"
+addopts = "--cov=app --cov-branch --cov-report=term-missing --cov-report=xml --cov-fail-under=95"
