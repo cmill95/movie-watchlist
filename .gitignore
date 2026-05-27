@@ -17,3 +17,9 @@ wheels/
 # SQLite databases (dev and test)
 *.db
 *.db-journal
+
+# Coverage
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
