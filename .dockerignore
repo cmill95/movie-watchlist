@@ -1,0 +1,45 @@
+# Version control
+.git
+.gitignore
+.github
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+.pytest_cache
+.ruff_cache
+htmlcov
+.coverage
+coverage.xml
+
+# Virtual environments
+.venv
+venv
+env
+
+# Local databases
+*.db
+*.sqlite
+*.sqlite3
+
+# Tests
+tests
+test_*.py
+conftest.py
+
+# IDE/editor
+.vscode
+.idea
+*.swp
+.DS_Store
+
+# Documentation that doesn't ship with the runtime
+README.md
+*.pdf
+
+# Docker
+Dockerfile
+.dockerignore
