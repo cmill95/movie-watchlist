@@ -1,7 +1,7 @@
 ![CI](https://github.com/cmill95/movie-watchlist/actions/workflows/ci.yml/badge.svg)
 ![Python](https://img.shields.io/badge/python-3.12%20%7C%203.13%20%7C%203.14-blue)
 ![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)
-![codecov](https://codecov.io/gh/cmill95/moviewatchlist/branch/main/graph/badge.svg)
+![codecov](https://codecov.io/gh/cmill95/movie-watchlist/branch/main/graph/badge.svg)
 
 # movie-watchlist
 
