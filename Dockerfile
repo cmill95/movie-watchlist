@@ -1,6 +1,6 @@
 FROM python:3.14-slim
 
-# Install uc from the official distroless image
+# Install uv from the official distroless image
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
 WORKDIR /app
