@@ -1,18 +1,21 @@
-FROM python:3.14-slim
+# ---- Stage 1: builder ----
+FROM python:3.14-slim AS builder
 
-# Install uv from the official distroless image
+# uv only needs to exist here, in the builder
 COPY --from=ghcr.io/astral-sh/uv:0.5.11 /uv /uvx /bin/
 
 WORKDIR /code
-
-# Copy everything into the image
 COPY . .
-
-# Install dependencies
 RUN uv sync --frozen --no-dev
 
-# Add the venv's bin directory to PATH
-ENV PATH="/code/.venv/bin:$PATH"
+# ---- Stage 2: runtime ----
+FROM python:3.14-slim AS runtime
 
-# Run the app
+WORKDIR /code
+
+# Bring over only the .venv and the Python code in app from Builder stage
+COPY --from=builder /code/.venv /code/.venv
+COPY --from=builder /code/app /code/app
+
+ENV PATH="/code/.venv/bin:$PATH"
 CMD ["fastapi", "run", "app/main.py", "--host", "0.0.0.0", "--port", "8000"]
