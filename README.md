@@ -11,16 +11,19 @@ A small FastAPI + HTMX app for tracking movies you want to watch and movies you'
 
 ## Stack
 
-- Python 3.12
+- Python 3.12+ (CI runs against 3.12, 3.13, and 3.14)
 - FastAPI for the backend
 - HTMX for the interactive frontend (no JS framework, no build step)
 - Jinja2 for server-rendered templates
 - SQLite for storage (via the standard-library `sqlite3` module)
 - Pydantic for request/response validation
-- pytest for testing
+- pytest for testing, with `pytest-cov` for coverage
 - ruff for lint and format
 - pre-commit for local commit-time checks
-- GitHub Actions for CI
+- Docker for containerized builds (multi-stage, runs as a non-root user)
+- GitHub Actions for CI (lint, format, and tests across a Python version matrix)
+- Codecov for coverage reporting
+- Dependabot for weekly dependency updates
 
 ## Prerequisites
 
@@ -35,7 +38,8 @@ A small FastAPI + HTMX app for tracking movies you want to watch and movies you'
   powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
   ```
 
-  See the [uv install docs](https://docs.astral.sh/uv/getting-started/installation/) for other options (Homebrew, pipx, etc.).
+See the [uv install docs](https://docs.astral.sh/uv/getting-started/installation/) for other options (Homebrew, pipx, etc.).
+- (Optional) [Docker](https://docs.docker.com/get-docker/), if you'd rather run the app in a container than locally.
 
 ## Getting started
 
@@ -52,6 +56,27 @@ uv run fastapi dev app/main.py
 ```
 
 The app will be available at <http://127.0.0.1:8000>. FastAPI's auto-generated API docs are at <http://127.0.0.1:8000/docs>.
+
+### Run with Docker
+
+The app ships with a multi-stage `Dockerfile` (built on `python:3.14-slim`) that runs as a non-root user and includes a `HEALTHCHECK` against the `/health` endpoint.
+
+```sh
+# build the image
+docker build -t movie-watchlist .
+
+# run it in the background, mapping host port 8000 -> container port 8000
+docker run -d -p 8000:8000 --name mw movie-watchlist
+```
+
+Then visit <http://localhost:8000> and the liveness check at <http://localhost:8000/health>.
+
+```sh
+# inspect or tear down the container
+docker logs mw        # view output (add -f to follow)
+docker stop mw        # stop it
+docker rm mw          # remove it (add -f to force-remove a running one)
+```
 
 ## API
 
@@ -94,3 +119,9 @@ uv run pytest
 uv run ruff check .
 uv run ruff format .
 ```
+
+Tests are split into integration tests (`test_movies.py`, exercising the routes via `TestClient`) and storage-layer unit tests (`test_storage.py`, hitting `app.storage` and its DB-level constraints directly). Coverage settings live in `pyproject.toml` — branch coverage, `term-missing` output, and a `--cov-fail-under` floor so coverage can't silently regress.
+
+## Continuous integration
+
+On every pull request, GitHub Actions runs ruff (lint + format check) and pytest across Python 3.12 / 3.13 / 3.14, plus the pre-commit hooks. A `ci-passed` aggregator job gives branch protection a single stable check to require. Coverage reports are uploaded to Codecov.
