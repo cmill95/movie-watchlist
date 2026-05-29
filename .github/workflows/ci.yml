@@ -43,9 +43,12 @@ jobs:
         run: uv run pytest
 
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@v5
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
         with:
           files: ./coverage.xml
+          fail_ci_if_error: true
 
   pre-commit:
     runs-on: ubuntu-latest
