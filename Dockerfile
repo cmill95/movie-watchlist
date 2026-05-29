@@ -5,7 +5,7 @@ FROM python:3.14-slim AS builder
 COPY --from=ghcr.io/astral-sh/uv:0.5.11 /uv /uvx /bin/
 
 # Force uv to use the base image's system Python instead of downloading and managing its own
-# ENV UV_PYTHON_DOWNLOADS=0
+ENV UV_PYTHON_DOWNLOADS=0
 
 WORKDIR /code
 COPY . .
