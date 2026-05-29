@@ -78,6 +78,22 @@ docker stop mw        # stop it
 docker rm mw          # remove it (add -f to force-remove a running one)
 ```
 
+### Container image
+
+Every push to `main` builds the multi-stage image and publishes it to the
+GitHub Container Registry (GHCR), tagged `latest` and with the commit SHA,
+then scans it for critical/high CVEs with Trivy.
+
+Pull and run the published image instead of building locally:
+
+```sh
+docker pull ghcr.io/cmill95/movie-watchlist:latest
+docker run -d -p 8000:8000 --name mw ghcr.io/cmill95/movie-watchlist:latest
+```
+
+Published images are listed under the repo's
+[Packages](https://github.com/cmill95/movie-watchlist/pkgs/container/movie-watchlist).
+
 ## API
 
 The app exposes two parallel sets of endpoints: a JSON API for programmatic access, and an HTMX/HTML API used by the browser UI.
