@@ -1,0 +1,19 @@
+# Unfixed CVEs in the python:3.14-slim base image (Debian). None are in our
+# code or used by the app at runtime, and no upstream fix is available yet.
+# Each waiver expires 2026-09-01 to force a re-review — check whether a fix
+# has shipped or the base image can be bumped before extending.
+
+# ncurses buffer overflow — libncursesw6 / libtinfo6 / ncurses-base / ncurses-bin
+CVE-2025-69720 exp:2026-09-01
+
+# perl Archive::Tar symlink extraction (CRITICAL)
+CVE-2026-42496 exp:2026-09-01
+
+# perl heap buffer overflow (CRITICAL)
+CVE-2026-8376 exp:2026-09-01
+
+# perl Archive::Tar hardlink extraction
+CVE-2026-42497 exp:2026-09-01
+
+# perl Archive::Tar memory exhaustion
+CVE-2026-9538 exp:2026-09-01
