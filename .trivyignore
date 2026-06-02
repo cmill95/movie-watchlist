@@ -17,3 +17,6 @@ CVE-2026-42497 exp:2026-09-01
 
 # perl Archive::Tar memory exhaustion
 CVE-2026-9538 exp:2026-09-01
+
+# perl IO::Compress eval injection via output glob
+CVE-2026-48962 exp:2026-09-01
