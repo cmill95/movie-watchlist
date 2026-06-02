@@ -27,24 +27,17 @@ Known limitations:
 """
 
 import contextlib
-import os
 import sqlite3
 from datetime import UTC, datetime
 from pathlib import Path
 
+from app.config import get_settings
 from app.models import MovieCreate, MovieRead, MovieUpdate
-
-_DEFAULT_DB_PATH = "movies.db"
 
 
 def _db_path() -> Path:
-    """Resolve the DB path at call time, not import time.
-
-    Reading the env var on each call lets tests override MOVIES_DB_PATH
-    before any storage function runs, without needing to mutate
-    module-level state from the test fixture.
-    """
-    return Path(os.environ.get("MOVIES_DB_PATH", _DEFAULT_DB_PATH))
+    """DB path is provided by Settings class in app/config.py"""
+    return Path(get_settings().movies_db_path)
 
 
 def _connect() -> sqlite3.Connection:
