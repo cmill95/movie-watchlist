@@ -7,7 +7,6 @@
 
 A small FastAPI + HTMX app for tracking movies you want to watch and movies you've watched. Each movie has a title, optional year, status (to-watch or watched), optional 1-10 rating, and optional notes. Data is persisted in a local SQLite database.
 
-> Context: this is a throwaway project built during Week 1 of my summer internship.
 
 ## Stack
 
@@ -20,6 +19,7 @@ A small FastAPI + HTMX app for tracking movies you want to watch and movies you'
 - pytest for testing, with `pytest-cov` for coverage
 - ruff for lint and format
 - pre-commit for local commit-time checks
+- just as the command runner for common dev tasks (run `just --list`)
 - Docker for containerized builds (multi-stage, runs as a non-root user)
 - GitHub Actions for CI (lint, format, and tests across a Python version matrix)
 - Codecov for coverage reporting
@@ -40,6 +40,7 @@ A small FastAPI + HTMX app for tracking movies you want to watch and movies you'
 
 See the [uv install docs](https://docs.astral.sh/uv/getting-started/installation/) for other options (Homebrew, pipx, etc.).
 - (Optional) [Docker](https://docs.docker.com/get-docker/), if you'd rather run the app in a container than locally.
+- (Optional) [`just`](https://github.com/casey/just) as a command runner for the project's dev tasks. Install with `uv tool install rust-just`, then run `just --list` to see the available recipes.
 
 ## Getting started
 
@@ -123,6 +124,8 @@ These return HTML fragments and are consumed by the browser UI, not intended for
 | DELETE | `/ui/movies/{movie_id}`       | Empty 200 response       |
 
 ## Development
+
+Common dev tasks are wrapped as [`just`](https://github.com/casey/just) recipes — run `just --list` to see them all (`just install`, `just test`, `just lint`, `just format`, and so on). The recipes are thin wrappers over the `uv run ...` commands below, so you can run those directly if you'd rather not install `just`:
 
 ```sh
 # install the pre-commit hook (runs ruff on every commit)
