@@ -13,20 +13,29 @@ def pytest_configure(config):
     os.environ["MOVIES_DB_PATH"] = db_path
 
 
-@pytest.fixture(scope="session", autouse=True)
-def _init_db():
-    """Create the schema once per test session."""
-    from app.storage import init_db
+@pytest.fixture(scope="session")
+def repo():
+    """The concrete SQLite repository pointed at the test DB.
 
-    init_db()
+    Constructed directly, not via get_repository, because tests need reset()
+    """
+
+    from app.config import get_settings
+    from app.storage.sqlite_repo import SqliteMovieRepository
+
+    return SqliteMovieRepository(get_settings().movies_db_path)
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _init_schema(repo):
+    """Create the schema once per test session."""
+    repo.init_schema()
 
 
 @pytest.fixture(autouse=True)
-def _reset_storage():
+def _reset(repo):
     """Clear movies between tests."""
-    from app.storage import reset_storage
-
-    reset_storage()
+    repo.reset()
 
 
 @pytest.fixture(scope="session")

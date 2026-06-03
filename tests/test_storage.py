@@ -5,13 +5,15 @@ app.storage directly. They cover defense-in-depth guarantees that the
 integration tests in test_movies.py only cover transitively.
 """
 
+import contextlib
 import sqlite3
 from datetime import UTC, datetime
 
 import pytest
 
+from app.config import get_settings
 from app.models import MovieCreate, MovieUpdate
-from app.storage import _UPDATABLE_COLUMNS, _connect, create, init_db, reset_storage
+from app.storage.sqlite_repo import _UPDATABLE_COLUMNS, _open
 
 
 def _raw_insert(title="The Matrix", year=1999, status="to_watch", rating=None, notes=None):
@@ -22,7 +24,7 @@ def _raw_insert(title="The Matrix", year=1999, status="to_watch", rating=None, n
     other fields default to valid values.
     """
     now = datetime.now(UTC).isoformat()
-    with _connect() as conn:
+    with contextlib.closing(_open(get_settings().movies_db_path)) as conn, conn:
         return conn.execute(
             """
             INSERT INTO movies (title, year, status, rating, notes, created_at, updated_at)
@@ -100,11 +102,11 @@ def test_rating_above_max_raises_integrity_error():
 # ============================================================================
 
 
-def test_init_db_is_idempotent():
+def test_init_schema_is_idempotent(repo):
 
     # If not idempotent, SQL will raise OperationalError: table movies already exists
-    init_db()
-    init_db()
+    repo.init_schema()
+    repo.init_schema()
 
 
 # ============================================================================
@@ -112,13 +114,13 @@ def test_init_db_is_idempotent():
 # ============================================================================
 
 
-def test_reset_storage_resets_id_sequence():
-    first = create(MovieCreate(title="First"))
+def test_reset_storage_resets_id_sequence(repo):
+    first = repo.create(MovieCreate(title="First"))
     assert first.id == 1
 
-    reset_storage()
+    repo.reset()
 
-    second = create(MovieCreate(title="Second"))
+    second = repo.create(MovieCreate(title="Second"))
     assert second.id == 1
 
 
