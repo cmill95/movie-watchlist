@@ -68,6 +68,7 @@ class SqliteMovieRepository:
     def __init__(self, db_path: Path | str) -> None:
         self._db_path = Path(db_path)
 
+    # Added for convience, thin wrapper for _open()
     def _connect(self) -> sqlite3.Connection:
         return _open(self._db_path)
 
