@@ -24,11 +24,11 @@ from app.models import MovieCreate, MovieRead, MovieUpdate
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS movies (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    title       TEXT    NOT NULL CHECK (length(title) BETWEEN 1 AND 200),
-    year        INTEGER          CHECK (year IS NULL OR year BETWEEN 1888 AND 2100),
-    status      TEXT    NOT NULL CHECK (status IN ('to_watch', 'watched')),
-    rating      INTEGER          CHECK (rating IS NULL OR rating BETWEEN 1 AND 10),
-    notes       TEXT             CHECK (notes IS NULL OR length(notes) BETWEEN 1 AND 2000),
+    title       TEXT    NOT NULL,
+    year        INTEGER,
+    status      TEXT    NOT NULL,
+    rating      INTEGER,
+    notes       TEXT,
     created_at  TEXT    NOT NULL,
     updated_at  TEXT    NOT NULL
 )
