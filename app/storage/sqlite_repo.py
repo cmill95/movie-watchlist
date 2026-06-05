@@ -85,6 +85,9 @@ class SqliteMovieRepository:
             conn.execute("DELETE FROM movies")
             conn.execute("DELETE FROM sqlite_sequence WHERE name = 'movies'")
 
+    def dispose(self) -> None:
+        """No persistent connection to release; present for lifecycle symmetry."""
+
     # --- MovieRepository protocol
 
     def create(self, data: MovieCreate) -> MovieRead:

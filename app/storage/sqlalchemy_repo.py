@@ -83,6 +83,10 @@ class SqlAlchemyMovieRepository:
         Base.metadata.drop_all(self._engine)
         Base.metadata.create_all(self._engine)
 
+    def dispose(self) -> None:
+        """Release the engine's connection pool. Lifecycle/shutdown concern."""
+        self._engine.dispose()
+
     # --- MovieRepository protocol ---
 
     def create(self, data: MovieCreate) -> MovieRead:
