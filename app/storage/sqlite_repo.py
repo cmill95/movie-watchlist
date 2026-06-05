@@ -17,10 +17,6 @@ from pathlib import Path
 
 from app.models import MovieCreate, MovieRead, MovieUpdate
 
-# Validation rules are duplicated with Pydantic models in app/models.py
-# (Title, Year, Rating, Notes, MovieStatus). When changing rules in one
-# place, update the other.
-
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS movies (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
