@@ -87,3 +87,10 @@ def test_delete_removes(repo):
 
 def test_delete_missing_returns_false(repo):
     assert repo.delete(999) is False
+
+
+def test_update_status(repo):
+    movie = repo.create(MovieCreate(title="X"))  # defaults to to_watch
+    updated = repo.update(movie.id, MovieUpdate(status=MovieStatus.WATCHED))
+    assert updated is not None
+    assert updated.status == MovieStatus.WATCHED
