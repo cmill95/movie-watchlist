@@ -14,7 +14,7 @@ A small FastAPI + HTMX app for tracking movies you want to watch and movies you'
 - FastAPI for the backend
 - HTMX for the interactive frontend (no JS framework, no build step)
 - Jinja2 for server-rendered templates
-- SQLite for storage (via the standard-library `sqlite3` module)
+- SQLite for storage, behind a `MovieRepository` interface with two interchangeable backends — stdlib `sqlite3` and SQLAlchemy 2.0
 - Pydantic for request/response validation
 - pytest for testing, with `pytest-cov` for coverage
 - ruff for lint and format
@@ -123,6 +123,24 @@ These return HTML fragments and are consumed by the browser UI, not intended for
 | PATCH  | `/ui/movies/{movie_id}`       | Movie row (read mode)    |
 | DELETE | `/ui/movies/{movie_id}`       | Empty 200 response       |
 
+## Storage
+
+The data layer sits behind a `MovieRepository` protocol (`app/storage/base.py`) declaring the five operations the routes use — `create`, `get`, `list_all`, `update`, `delete`. Two interchangeable backends implement it:
+
+- `SqliteMovieRepository` — stdlib `sqlite3`, with a hand-written schema and SQL.
+- `SqlAlchemyMovieRepository` — the same operations on the SQLAlchemy 2.0 ORM.
+
+Both persist to a SQLite file. `MOVIES_BACKEND` (`sqlite` or `sqlalchemy`, default `sqlite`) selects one at runtime, injected through `Depends(get_repository)`, so the routes never know which is in use. Lifecycle methods (`init_schema`, `reset`, `dispose`) live on the concrete classes, not the protocol — they're setup/teardown concerns, not route operations.
+
+### Notes on building both backends
+
+Writing the app against both backends surfaced where the abstraction holds and where it leaks.
+
+
+The main issue encountered was with `test_storage.py` which hit the raw `sqlite3` backend directly, this did not map cleanly with SQLAlchemy, as this backend made no integrity constraint guarentees. For this reason, `test_storage.py` was removed and `test_repository.py` was added, hitting both backends cleanly. Also, the integrity constraints guarenteed by the raw `sqlite3` backend were removed, now both solely rely on the Pydantic models to validate incoming data.
+
+Where I'd land if forced to pick: for an app this small, raw `sqlite3` — no dependency, nothing hidden. For the larger system with a growing schema, relationships, and migrations via Alembic, the ORM's lower boilerplate and tooling would win.
+
 ## Development
 
 Common dev tasks are wrapped as [`just`](https://github.com/casey/just) recipes — run `just --list` to see them all (`just install`, `just test`, `just lint`, `just format`, and so on). The recipes are thin wrappers over the `uv run ...` commands below, so you can run those directly if you'd rather not install `just`:
@@ -139,7 +157,7 @@ uv run ruff check .
 uv run ruff format .
 ```
 
-Tests are split into integration tests (`test_movies.py`, exercising the routes via `TestClient`) and storage-layer unit tests (`test_storage.py`, hitting `app.storage` and its DB-level constraints directly). Coverage settings live in `pyproject.toml` — branch coverage, `term-missing` output, and a `--cov-fail-under` floor so coverage can't silently regress.
+Tests are split into API tests (`test_movies.py`, exercising the routes via `TestClient` against the default backend) and `MovieRepository` contract tests (`test_repository.py`, asserting behavioral conformance against both backends via a parametrized fixture). Coverage settings live in `pyproject.toml` — branch coverage, `term-missing` output, and a `--cov-fail-under` floor so coverage can't silently regress.
 
 ## Continuous integration
 
