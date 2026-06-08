@@ -81,9 +81,10 @@ docker rm mw          # remove it (add -f to force-remove a running one)
 
 ### Container image
 
-Every push to `main` builds the multi-stage image and publishes it to the
-GitHub Container Registry (GHCR), tagged `latest` and with the commit SHA,
-then scans it for critical/high CVEs with Trivy.
+Every pull request builds the multi-stage image to catch Dockerfile
+regressions before merge. Pushes to `main` additionally publish it to the
+GitHub Container Registry (GHCR), tagged `latest` and with the commit SHA, then
+scan it for critical/high CVEs with Trivy.
 
 Pull and run the published image instead of building locally:
 
@@ -157,8 +158,16 @@ uv run ruff check .
 uv run ruff format .
 ```
 
-Tests are split into API tests (`test_movies.py`, exercising the routes via `TestClient` against the default backend) and `MovieRepository` contract tests (`test_repository.py`, asserting behavioral conformance against both backends via a parametrized fixture). Coverage settings live in `pyproject.toml` — branch coverage, `term-missing` output, and a `--cov-fail-under` floor so coverage can't silently regress.
+The in-process tests are split into API tests (`test_movies.py`, exercising the routes via `TestClient` against the default backend) and `MovieRepository` contract tests (`test_repository.py`, asserting behavioral conformance against both backends via a parametrized fixture). Coverage settings live in `pyproject.toml` — branch coverage, `term-missing` output, and a `--cov-fail-under` floor so coverage can't silently regress.
+
+End-to-end tests (`tests/e2e/test_container.py`) are out-of-process: they start the built Docker image and drive it over real HTTP with `httpx`, proving the deployed artifact works rather than just the code that goes into it. Because they exercise the container instead of the local app, they're excluded from coverage and deselected from the default `pytest` run via an `e2e` marker. Run them against a container listening on `http://localhost:8000` (override the target with `E2E_BASE_URL`):
+
+```sh
+uv run pytest tests/e2e -m e2e --no-cov
+```
 
 ## Continuous integration
 
 On every pull request, GitHub Actions runs ruff (lint + format check) and pytest across Python 3.12 / 3.13 / 3.14, plus the pre-commit hooks. A `ci-passed` aggregator job gives branch protection a single stable check to require. Coverage reports are uploaded to Codecov.
+
+The pipeline then builds the Docker image — on every PR, so a broken Dockerfile fails the PR — and runs the end-to-end suite against it. The built image is handed to a separate `e2e` job as an artifact, which loads it, starts the container, waits on `/health`, and runs `tests/e2e`. Publishing to GHCR happens only on pushes to `main`.
