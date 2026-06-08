@@ -94,7 +94,7 @@ def test_get_missing_returns_404(client):
     assert response.status_code == 404
 
 
-# ---- HTMX API ----
+# ---- HTMX rendering ----
 
 
 def test_index_page_renders(client):
