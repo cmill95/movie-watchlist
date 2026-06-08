@@ -107,10 +107,21 @@ jobs:
           context: .
           load: true
           tags: |
+            movie-watchlist:ci
             ghcr.io/cmill95/movie-watchlist:latest
             ghcr.io/cmill95/movie-watchlist:${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Save image for the e2e job
+        run: docker save movie-watchlist:ci -o /tmp/image.tar
+
+      - name: Upload image artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: image
+          path: /tmp/image.tar
+          retention-days: 1
 
       - name: Scan image with Trivy
         if: github.ref == 'refs/heads/main'
@@ -126,3 +137,55 @@ jobs:
         run: |
           docker push ghcr.io/cmill95/movie-watchlist:latest
           docker push ghcr.io/cmill95/movie-watchlist:${{ github.sha }}
+
+
+  e2e:
+    needs: build-image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync --all-extras --dev
+
+      - name: Download image artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: image
+          path: /tmp
+
+      - name: Load image
+        run: docker load -i /tmp/image.tar
+
+      - name: Start container
+        run: docker run -d -p 8000:8000 --name mw movie-watchlist:ci
+
+      - name: Wait for container to be healthy
+        run: |
+          for i in $(seq 1 60); do
+            if curl -fsS http://localhost:8000/health >/dev/null 2>&1; then
+              echo "Container healthy"
+              exit 0
+            fi
+            sleep 0.5
+          done
+          echo "Container did not become healthy in time"
+          docker logs mw
+          exit 1
+
+      - name: Run e2e tests
+        run: uv run pytest tests/e2e -m e2e --no-cov
+
+      - name: Tear down container
+        if: always()
+        run: docker rm -f mw || true
