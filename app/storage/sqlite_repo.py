@@ -18,8 +18,14 @@ from pathlib import Path
 from app.models import MovieCreate, MovieRead, MovieUpdate
 
 _SCHEMA = """
+CREATE TABLE IF NOT EXISTS users (
+    id     INTEGER PRIMARY KEY AUTOINCREMENT,
+    name   TEXT    NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS movies (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id     INTEGER NOT NULL REFERENCES users(id),
     title       TEXT    NOT NULL,
     year        INTEGER,
     status      TEXT    NOT NULL,
@@ -27,7 +33,7 @@ CREATE TABLE IF NOT EXISTS movies (
     notes       TEXT,
     created_at  TEXT    NOT NULL,
     updated_at  TEXT    NOT NULL
-)
+);
 """
 
 # Columns that are safe to include in a dynamic UPDATE.
@@ -61,8 +67,9 @@ def _row_to_movie(row: sqlite3.Row) -> MovieRead:
 class SqliteMovieRepository:
     """MoiveRepository backed by stdlib sqlite3 (no ORM)."""
 
-    def __init__(self, db_path: Path | str) -> None:
+    def __init__(self, db_path: Path | str, user_id: int) -> None:
         self._db_path = Path(db_path)
+        self._user_id = user_id
 
     # Added for convience, thin wrapper for _open()
     def _connect(self) -> sqlite3.Connection:
@@ -73,7 +80,7 @@ class SqliteMovieRepository:
     def init_schema(self) -> None:
         """Create the movies table if absent."""
         with contextlib.closing(self._connect()) as conn, conn:
-            conn.execute(_SCHEMA)
+            conn.executescript(_SCHEMA)
 
     def reset(self) -> None:
         """Clear all movies and reset the id sequence. For tests."""
@@ -84,6 +91,10 @@ class SqliteMovieRepository:
     def dispose(self) -> None:
         """No persistent connection to release; present for lifecycle symmetry."""
 
+    def ensure_user(self, user_id: int, name: str) -> None:
+        with contextlib.closing(self._connect()) as conn, conn:
+            conn.execute("INSERT OR IGNORE INTO users (id, name) VALUES (?, ?)", (user_id, name))
+
     # --- MovieRepository protocol
 
     def create(self, data: MovieCreate) -> MovieRead:
@@ -91,10 +102,14 @@ class SqliteMovieRepository:
         with contextlib.closing(self._connect()) as conn, conn:
             cursor = conn.execute(
                 """
-                    INSERT INTO movies (title, year, status, rating, notes, created_at, updated_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
-                    """,
+                INSERT INTO movies (
+                    user_id, title, year, status,
+                    rating, notes, created_at, updated_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
                 (
+                    self._user_id,
                     data.title,
                     data.year,
                     data.status.value,
@@ -110,12 +125,17 @@ class SqliteMovieRepository:
 
     def get(self, movie_id: int) -> MovieRead | None:
         with contextlib.closing(self._connect()) as conn:
-            row = conn.execute("SELECT * FROM movies WHERE id = ?", (movie_id,)).fetchone()
+            row = conn.execute(
+                "SELECT * FROM movies WHERE id = ? AND user_id = ?", (movie_id, self._user_id)
+            ).fetchone()
         return _row_to_movie(row) if row is not None else None
 
     def list_all(self) -> list[MovieRead]:
         with contextlib.closing(self._connect()) as conn:
-            rows = conn.execute("SELECT * FROM movies ORDER BY id ASC").fetchall()
+            rows = conn.execute(
+                "SELECT * FROM movies WHERE user_id = ? ORDER BY id ASC",
+                (self._user_id,),
+            ).fetchall()
         return [_row_to_movie(row) for row in rows]
 
     def update(self, movie_id: int, data: MovieUpdate) -> MovieRead | None:
@@ -131,15 +151,19 @@ class SqliteMovieRepository:
 
         with contextlib.closing(self._connect()) as conn, conn:
             cursor = conn.execute(
-                f"UPDATE movies SET {set_clause} WHERE id = ?",
-                (*values, movie_id),
+                f"UPDATE movies SET {set_clause} WHERE id = ? AND user_id = ?",
+                (*values, movie_id, self._user_id),
             )
             if cursor.rowcount == 0:
                 return None
-            row = conn.execute("SELECT * FROM movies WHERE id = ?", (movie_id,)).fetchone()
+            row = conn.execute(
+                "SELECT * FROM movies WHERE id = ? AND user_id = ?", (movie_id, self._user_id)
+            ).fetchone()
         return _row_to_movie(row)
 
     def delete(self, movie_id: int) -> bool:
         with contextlib.closing(self._connect()) as conn, conn:
-            cursor = conn.execute("DELETE FROM movies WHERE id = ?", (movie_id,))
+            cursor = conn.execute(
+                "DELETE FROM movies WHERE id = ? AND user_id = ?", (movie_id, self._user_id)
+            )
         return cursor.rowcount > 0

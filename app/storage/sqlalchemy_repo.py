@@ -12,7 +12,7 @@ protocol — same split as the sqlite backend.
 from datetime import UTC, datetime
 from pathlib import Path
 
-from sqlalchemy import DateTime, create_engine, select
+from sqlalchemy import DateTime, ForeignKey, create_engine, select
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
 
 from app.models import MovieCreate, MovieRead, MovieUpdate
@@ -22,10 +22,18 @@ class Base(DeclarativeBase):
     pass
 
 
+class UserORM(Base):
+    __tablename__ = "users"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str]
+
+
 class MovieORM(Base):
     __tablename__ = "movies"
 
     id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
     title: Mapped[str]
     year: Mapped[int | None]
     status: Mapped[str]
@@ -49,6 +57,7 @@ def _to_read(movie: MovieORM) -> MovieRead:
     return MovieRead.model_validate(
         {
             "id": movie.id,
+            "user_id": movie.user_id,
             "title": movie.title,
             "year": movie.year,
             "status": movie.status,
@@ -63,8 +72,9 @@ def _to_read(movie: MovieORM) -> MovieRead:
 class SqlAlchemyMovieRepository:
     """MovieRepository backed by the SQLAlchemy 2.0 ORM."""
 
-    def __init__(self, db_path: Path | str) -> None:
+    def __init__(self, db_path: Path | str, user_id) -> None:
         self._db_path = Path(db_path)
+        self._user_id = user_id
 
         # The engine is shared across FastAPI's threadpool, so same-thread is set False
         self._engine = create_engine(
@@ -87,11 +97,18 @@ class SqlAlchemyMovieRepository:
         """Release the engine's connection pool. Lifecycle/shutdown concern."""
         self._engine.dispose()
 
+    def ensure_user(self, user_id: int, name: str) -> None:
+        with self._sessions() as session:
+            if session.get(UserORM, user_id) is None:
+                session.add(UserORM(id=user_id, name=name))
+                session.commit()
+
     # --- MovieRepository protocol ---
 
     def create(self, data: MovieCreate) -> MovieRead:
         now = _now()
         movie = MovieORM(
+            user_id=self._user_id,
             title=data.title,
             year=data.year,
             status=data.status.value,
@@ -106,20 +123,30 @@ class SqlAlchemyMovieRepository:
             session.commit()
             return _to_read(movie)
 
+    def _get_owned(self, session, movie_id: int) -> MovieORM | None:
+        return session.scalars(
+            select(MovieORM).where(
+                MovieORM.id == movie_id,
+                MovieORM.user_id == self._user_id,
+            )
+        ).one_or_none()
+
     def get(self, movie_id: int) -> MovieRead | None:
         with self._sessions() as session:
-            movie = session.get(MovieORM, movie_id)
+            movie = self._get_owned(session, movie_id)
             return _to_read(movie) if movie is not None else None
 
     def list_all(self) -> list[MovieRead]:
         with self._sessions() as session:
-            movies = session.scalars(select(MovieORM).order_by(MovieORM.id)).all()
+            movies = session.scalars(
+                select(MovieORM).where(MovieORM.user_id == self._user_id).order_by(MovieORM.id)
+            ).all()
             return [_to_read(m) for m in movies]
 
     def update(self, movie_id: int, data: MovieUpdate) -> MovieRead | None:
         changes = data.model_dump(exclude_unset=True)
         with self._sessions() as session:
-            movie = session.get(MovieORM, movie_id)
+            movie = self._get_owned(session, movie_id)
             if movie is None:
                 return None
 
@@ -133,7 +160,7 @@ class SqlAlchemyMovieRepository:
 
     def delete(self, movie_id: int) -> bool:
         with self._sessions() as session:
-            movie = session.get(MovieORM, movie_id)
+            movie = self._get_owned(session, movie_id)
             if movie is None:
                 return False
             session.delete(movie)

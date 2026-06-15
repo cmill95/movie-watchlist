@@ -94,3 +94,17 @@ def test_update_status(repo):
     updated = repo.update(movie.id, MovieUpdate(status=MovieStatus.WATCHED))
     assert updated is not None
     assert updated.status == MovieStatus.WATCHED
+
+
+def test_movies_are_scoped_to_owner(two_owners):
+    alice, bob = two_owners
+    a = alice.create(MovieCreate(title="Alice's"))
+    b = bob.create(MovieCreate(title="Bob's"))
+
+    assert [m.id for m in alice.list_all()] == [a.id]
+    assert [m.id for m in bob.list_all()] == [b.id]
+    assert bob.get(a.id) is None
+    assert alice.get(b.id) is None
+    assert bob.update(a.id, MovieUpdate(title="hijacked")) is None
+    assert bob.delete(a.id) is False
+    assert alice.get(a.id).title == "Alice's"
