@@ -26,6 +26,7 @@ def backend_repo(request):
     """
     from app.config import get_settings
 
+    engine = None
     if request.param == "sqlite":
         from app.storage.sqlite_repo import SqliteMovieRepository
 
@@ -33,13 +34,15 @@ def backend_repo(request):
     else:
         fd, path = tempfile.mkstemp(suffix=".db")
         os.close(fd)
-        from app.storage.sqlalchemy_repo import SqlAlchemyMovieRepository
+        from app.storage.sqlalchemy_repo import SqlAlchemyMovieRepository, make_engine
 
-        repo = SqlAlchemyMovieRepository(path, _TEST_USER_ID)
+        engine = make_engine(path)
+        repo = SqlAlchemyMovieRepository(engine, _TEST_USER_ID)
 
     repo.init_schema()
     yield repo
-    repo.dispose()
+    if engine is not None:
+        engine.dispose()
 
 
 @pytest.fixture
@@ -83,15 +86,22 @@ def two_owners(request, tmp_path):
     """A pair of repos bound to different users over one fresh db, for
     exercising the per-user ownership boundary on each backend."""
     db = str(tmp_path / "scoped.db")
+    engine = None
     if request.param == "sqlite":
-        from app.storage.sqlite_repo import SqliteMovieRepository as Repo
-    else:
-        from app.storage.sqlalchemy_repo import SqlAlchemyMovieRepository as Repo
+        from app.storage.sqlite_repo import SqliteMovieRepository
 
-    alice, bob = Repo(db, 1), Repo(db, 2)
+        alice = SqliteMovieRepository(db, 1)
+        bob = SqliteMovieRepository(db, 2)
+    else:
+        from app.storage.sqlalchemy_repo import SqlAlchemyMovieRepository, make_engine
+
+        engine = make_engine(db)
+        alice = SqlAlchemyMovieRepository(engine, 1)
+        bob = SqlAlchemyMovieRepository(engine, 2)
+
     alice.init_schema()
     alice.ensure_user(1, "alice")
     alice.ensure_user(2, "bob")
     yield alice, bob
-    alice.dispose()
-    bob.dispose()
+    if engine is not None:
+        engine.dispose()

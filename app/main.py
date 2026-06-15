@@ -10,7 +10,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from app.models import MovieCreate, MovieRead, MovieStatus, MovieUpdate, Notes, Rating, Title, Year
-from app.storage import MovieRepository, get_repository
+from app.storage import MovieRepository, dispose_engine, get_repository
 
 
 @asynccontextmanager
@@ -18,6 +18,7 @@ async def lifespan(app: FastAPI):
     # Startup: ensure the configured backend's schema exists.
     get_repository()
     yield
+    dispose_engine()
     # Shutdown: nothing to clean up for SQLite (connections are per-request).
 
 
