@@ -62,6 +62,7 @@ class MovieRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
+    user_id: int
     title: str
     year: int | None
     status: MovieStatus

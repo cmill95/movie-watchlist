@@ -13,6 +13,9 @@ def pytest_configure(config):
     os.environ["MOVIES_DB_PATH"] = db_path
 
 
+_TEST_USER_ID = 1
+
+
 @pytest.fixture(scope="session", params=["sqlite", "sqlalchemy"])
 def backend_repo(request):
     """One repository per backend, constructed once. Drives the MovieRepository
@@ -26,13 +29,13 @@ def backend_repo(request):
     if request.param == "sqlite":
         from app.storage.sqlite_repo import SqliteMovieRepository
 
-        repo = SqliteMovieRepository(get_settings().movies_db_path)
+        repo = SqliteMovieRepository(get_settings().movies_db_path, _TEST_USER_ID)
     else:
         fd, path = tempfile.mkstemp(suffix=".db")
         os.close(fd)
         from app.storage.sqlalchemy_repo import SqlAlchemyMovieRepository
 
-        repo = SqlAlchemyMovieRepository(path)
+        repo = SqlAlchemyMovieRepository(path, _TEST_USER_ID)
 
     repo.init_schema()
     yield repo
@@ -43,6 +46,7 @@ def backend_repo(request):
 def repo(backend_repo):
     """A clean repository for each contract test, reset before use."""
     backend_repo.reset()
+    backend_repo.ensure_user(_TEST_USER_ID, "test")
     return backend_repo
 
 
@@ -63,11 +67,31 @@ def client():
     from app.storage import get_repository
     from app.storage.sqlite_repo import SqliteMovieRepository
 
-    repo = SqliteMovieRepository(get_settings().movies_db_path)
+    repo = SqliteMovieRepository(get_settings().movies_db_path, _TEST_USER_ID)
     repo.init_schema()
     repo.reset()
+    repo.ensure_user(_TEST_USER_ID, "test")
     app.dependency_overrides[get_repository] = lambda: repo
     try:
         yield TestClient(app)
     finally:
         app.dependency_overrides.clear()
+
+
+@pytest.fixture(params=["sqlite", "sqlalchemy"])
+def two_owners(request, tmp_path):
+    """A pair of repos bound to different users over one fresh db, for
+    exercising the per-user ownership boundary on each backend."""
+    db = str(tmp_path / "scoped.db")
+    if request.param == "sqlite":
+        from app.storage.sqlite_repo import SqliteMovieRepository as Repo
+    else:
+        from app.storage.sqlalchemy_repo import SqlAlchemyMovieRepository as Repo
+
+    alice, bob = Repo(db, 1), Repo(db, 2)
+    alice.init_schema()
+    alice.ensure_user(1, "alice")
+    alice.ensure_user(2, "bob")
+    yield alice, bob
+    alice.dispose()
+    bob.dispose()
