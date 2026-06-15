@@ -20,3 +20,8 @@ CVE-2026-9538 exp:2026-09-01
 
 # perl IO::Compress eval injection via output glob
 CVE-2026-48962 exp:2026-09-01
+
+# no upstream fix as of 2026-06; revisit
+CVE-2026-11822 exp:2026-09-01
+CVE-2026-11824 exp:2026-09-01
+CVE-2026-48959 exp:2026-09-01
