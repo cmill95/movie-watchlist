@@ -19,7 +19,7 @@ dev = [
     "pytest>=9.0.3",
     "pytest-cov>=5.0.0",
     "ruff>=0.15.15",
-    "ty>=0.0.42",
+    "ty>=0.0.46",
 ]
 
 [tool.ruff]
