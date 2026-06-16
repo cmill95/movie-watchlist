@@ -66,8 +66,7 @@ def client():
     from fastapi.testclient import TestClient
 
     from app.config import get_settings
-    from app.main import app
-    from app.storage import get_repository
+    from app.main import app, get_repository
     from app.storage.sqlite_repo import SqliteMovieRepository
 
     repo = SqliteMovieRepository(get_settings().movies_db_path, _TEST_USER_ID)
@@ -105,3 +104,22 @@ def two_owners(request, tmp_path):
     yield alice, bob
     if engine is not None:
         engine.dispose()
+
+
+@pytest.fixture
+def identity_client():
+    """No repo override, so full cookie -> user -> scoped repo path runs.
+    Resets the schema and seeds users 1 and 2 on the shared SQLite backend."""
+    from fastapi.testclient import TestClient
+
+    from app.config import get_settings
+    from app.main import app
+    from app.storage.sqlite_repo import SqliteMovieRepository
+
+    app.dependency_overrides.clear()
+    admin = SqliteMovieRepository(get_settings().movies_db_path, 1)
+    admin.init_schema()
+    admin.reset()
+    admin.ensure_user(1, "alice")
+    admin.ensure_user(2, "bob")
+    return TestClient(app)
