@@ -711,3 +711,39 @@ def test_delete_already_deleted_movie_returns_404(client):
 
     assert response.status_code == 404
     assert response.json()["detail"] == "Movie not found"
+
+
+# ============================================================================
+# Tests for per-user identity (cookie -> current user)
+# ============================================================================
+
+
+def test_no_cookie_uses_default_user(identity_client):
+    # POST with no cookie -> get_current_user falls back to the default user (1),
+    # which owns the movie, so the same default-user request can read it back.
+    created = identity_client.post("/movies", json={"title": "Default's"}).json()
+    assert identity_client.get(f"/movies/{created['id']}").status_code == 200
+
+
+def test_invalid_cookie_falls_back_to_default_user(identity_client):
+    created = identity_client.post("/movies", json={"title": "Default's"}).json()
+    resp = identity_client.get(
+        f"/movies/{created['id']}", headers={"Cookie": "user_id=not-a-number"}
+    )
+    assert resp.status_code == 200
+
+
+# ============================================================================
+# Tests for application lifespan
+# ============================================================================
+
+
+def test_lifespan_initializes_storage():
+    """Entering the app context runs lifespan: init_storage on startup,
+    dispose_engine on shutdown."""
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+
+    with TestClient(app) as client:
+        assert client.get("/health").status_code == 200
