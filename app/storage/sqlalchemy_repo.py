@@ -12,7 +12,7 @@ protocol — same split as the sqlite backend.
 from datetime import UTC, datetime
 from pathlib import Path
 
-from sqlalchemy import DateTime, ForeignKey, create_engine, select
+from sqlalchemy import DateTime, Engine, ForeignKey, create_engine, select
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
 
 from app.models import MovieCreate, MovieRead, MovieUpdate
@@ -69,18 +69,19 @@ def _to_read(movie: MovieORM) -> MovieRead:
     )
 
 
+def make_engine(db_path: Path | str) -> Engine:
+    return create_engine(
+        f"sqlite:///{Path(db_path)}",
+        connect_args={"check_same_thread": False},
+    )
+
+
 class SqlAlchemyMovieRepository:
     """MovieRepository backed by the SQLAlchemy 2.0 ORM."""
 
-    def __init__(self, db_path: Path | str, user_id) -> None:
-        self._db_path = Path(db_path)
+    def __init__(self, engine: Engine, user_id) -> None:
         self._user_id = user_id
-
-        # The engine is shared across FastAPI's threadpool, so same-thread is set False
-        self._engine = create_engine(
-            f"sqlite:///{self._db_path}",
-            connect_args={"check_same_thread": False},
-        )
+        self._engine = engine
         self._sessions = sessionmaker(self._engine, expire_on_commit=False)
 
     # --- Lifescycle ---
@@ -92,10 +93,6 @@ class SqlAlchemyMovieRepository:
         # drop + recreate also clears SQLite's autoincrement counter back to 1
         Base.metadata.drop_all(self._engine)
         Base.metadata.create_all(self._engine)
-
-    def dispose(self) -> None:
-        """Release the engine's connection pool. Lifecycle/shutdown concern."""
-        self._engine.dispose()
 
     def ensure_user(self, user_id: int, name: str) -> None:
         with self._sessions() as session:

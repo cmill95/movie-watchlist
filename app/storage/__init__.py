@@ -6,9 +6,11 @@ factory that hands routes a repository via FastAPI's Depends.
 
 from functools import lru_cache
 
+from sqlalchemy import Engine
+
 from app.config import get_settings
 from app.storage.base import MovieRepository
-from app.storage.sqlalchemy_repo import SqlAlchemyMovieRepository
+from app.storage.sqlalchemy_repo import SqlAlchemyMovieRepository, make_engine
 from app.storage.sqlite_repo import SqliteMovieRepository
 
 __all__ = [
@@ -16,20 +18,38 @@ __all__ = [
     "MovieRepository",
     "SqlAlchemyMovieRepository",
     "SqliteMovieRepository",
-    "get_repository",
+    "init_storage",
+    "make_repository",
 ]
+
+
+@lru_cache
+def get_engine() -> Engine:
+    return make_engine(get_settings().movies_db_path)
+
+
+def dispose_engine() -> None:
+    """Release the shared engine at shutdown. Only the ORM backend builds one."""
+    if get_settings().movies_backend == "sqlalchemy":
+        get_engine().dispose()
+        get_engine.cache_clear()
+
 
 DEFAULT_USER_ID = 1
 
 
-@lru_cache
-def get_repository() -> MovieRepository:
-
+def make_repository(user_id: int) -> SqliteMovieRepository | SqlAlchemyMovieRepository:
+    """Build a repository bound to a user. Returns the concrete backend so the
+    off-Protocol lifecycle methods (init_schema/ensure_user) stay reachable for
+    init_storage; the route-facing Protocol boundary is get_repository in main."""
     settings = get_settings()
     if settings.movies_backend == "sqlalchemy":
-        repo = SqlAlchemyMovieRepository(settings.movies_db_path, DEFAULT_USER_ID)
-    else:
-        repo = SqliteMovieRepository(settings.movies_db_path, DEFAULT_USER_ID)
+        return SqlAlchemyMovieRepository(get_engine(), user_id)
+    return SqliteMovieRepository(settings.movies_db_path, user_id)
+
+
+def init_storage() -> None:
+    """One-time startup. Ensures the schema exists and the default user is seeded."""
+    repo = make_repository(DEFAULT_USER_ID)
     repo.init_schema()
     repo.ensure_user(DEFAULT_USER_ID, "default")
-    return repo

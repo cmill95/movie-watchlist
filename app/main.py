@@ -3,22 +3,43 @@
 from contextlib import asynccontextmanager
 from typing import Annotated
 
-from fastapi import Depends, FastAPI, Form, HTTPException, Request
+from fastapi import Cookie, Depends, FastAPI, Form, HTTPException, Request
 from fastapi import status as http_status
 from fastapi.responses import HTMLResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from app.models import MovieCreate, MovieRead, MovieStatus, MovieUpdate, Notes, Rating, Title, Year
-from app.storage import MovieRepository, get_repository
+from app.storage import (
+    DEFAULT_USER_ID,
+    MovieRepository,
+    dispose_engine,
+    init_storage,
+    make_repository,
+)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup: ensure the configured backend's schema exists.
-    get_repository()
+    init_storage()
     yield
+    dispose_engine()
     # Shutdown: nothing to clean up for SQLite (connections are per-request).
+
+
+def get_current_user(user_id: Annotated[str | None, Cookie()] = None) -> int:
+    """Current user id from the `user_id` cookie. Unverified at this point."""
+    if user_id is None:
+        return DEFAULT_USER_ID
+    try:
+        return int(user_id)
+    except ValueError:
+        return DEFAULT_USER_ID
+
+
+def get_repository(user_id: Annotated[int, Depends(get_current_user)]) -> MovieRepository:
+    return make_repository(user_id)
 
 
 app = FastAPI(title="Movie Watchlist", version="0.1.0", lifespan=lifespan)

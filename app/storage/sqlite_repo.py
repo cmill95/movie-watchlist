@@ -88,9 +88,6 @@ class SqliteMovieRepository:
             conn.execute("DELETE FROM movies")
             conn.execute("DELETE FROM sqlite_sequence WHERE name = 'movies'")
 
-    def dispose(self) -> None:
-        """No persistent connection to release; present for lifecycle symmetry."""
-
     def ensure_user(self, user_id: int, name: str) -> None:
         with contextlib.closing(self._connect()) as conn, conn:
             conn.execute("INSERT OR IGNORE INTO users (id, name) VALUES (?, ?)", (user_id, name))
