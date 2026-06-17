@@ -8,7 +8,10 @@ These assert behavior, not input validation: invalid input can't be constructed
 validation is covered by the API tests in test_movies.py instead.
 """
 
-from app.models import MovieCreate, MovieStatus, MovieUpdate
+import pytest
+
+from app.models import MovieCreate, MovieStatus, MovieUpdate, User
+from app.storage import DuplicateUserName
 
 
 def test_create_returns_movie_with_id(repo):
@@ -94,6 +97,48 @@ def test_update_status(repo):
     updated = repo.update(movie.id, MovieUpdate(status=MovieStatus.WATCHED))
     assert updated is not None
     assert updated.status == MovieStatus.WATCHED
+
+
+def test_create_user_assigns_id_and_lists(repo):
+    created = repo.create_user("Taylor")
+    assert created.id is not None
+    assert created.name == "Taylor"
+    assert created in repo.list_users()
+
+
+def test_get_user_returns_user_or_none(repo):
+    assert repo.get_user(9999) is None
+    created = repo.create_user("Pat")
+    assert repo.get_user(created.id) == created
+
+
+def test_create_user_rejects_duplicate_name(repo):
+    repo.create_user("Robin")
+    with pytest.raises(DuplicateUserName):
+        repo.create_user("Robin")
+
+
+def test_rename_user_rejects_an_existing_name(repo):
+    a = repo.create_user("Jo")
+    repo.create_user("Sam")
+    with pytest.raises(DuplicateUserName):
+        repo.rename_user(a.id, "Sam")
+
+
+def test_rename_user_to_its_own_name_is_allowed(repo):
+    a = repo.create_user("Kim")
+    assert repo.rename_user(a.id, "Kim") == User(id=a.id, name="Kim")
+
+
+def test_rename_user_changes_name(repo):
+    created = repo.create_user("Sam")
+    renamed = repo.rename_user(created.id, "Samuel")
+    assert renamed == User(id=created.id, name="Samuel")
+    assert renamed in repo.list_users()
+
+
+def test_rename_unknown_user_returns_none(repo):
+    assert repo.rename_user(9999, "Nobody") is None
 
 
 def test_movies_are_scoped_to_owner(two_owners):

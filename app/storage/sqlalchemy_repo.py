@@ -15,7 +15,8 @@ from pathlib import Path
 from sqlalchemy import DateTime, Engine, ForeignKey, create_engine, select
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
 
-from app.models import MovieCreate, MovieRead, MovieUpdate
+from app.models import MovieCreate, MovieRead, MovieUpdate, User
+from app.storage.base import DuplicateUserName
 
 
 class Base(DeclarativeBase):
@@ -99,6 +100,39 @@ class SqlAlchemyMovieRepository:
             if session.get(UserORM, user_id) is None:
                 session.add(UserORM(id=user_id, name=name))
                 session.commit()
+
+    def create_user(self, name: str) -> User:
+        with self._sessions() as session:
+            if session.scalar(select(UserORM).where(UserORM.name == name)) is not None:
+                raise DuplicateUserName(name)
+            user = UserORM(name=name)
+            session.add(user)
+            session.commit()
+            return User.model_validate(user)
+
+    def get_user(self, user_id: int) -> User | None:
+        with self._sessions() as session:
+            user = session.get(UserORM, user_id)
+            return User.model_validate(user) if user is not None else None
+
+    def rename_user(self, user_id: int, name: str) -> User | None:
+        with self._sessions() as session:
+            taken = session.scalar(
+                select(UserORM).where(UserORM.name == name, UserORM.id != user_id)
+            )
+            if taken is not None:
+                raise DuplicateUserName(name)
+            user = session.get(UserORM, user_id)
+            if user is None:
+                return None
+            user.name = name
+            session.commit()
+            return User.model_validate(user)
+
+    def list_users(self) -> list[User]:
+        with self._sessions() as session:
+            users = session.scalars(select(UserORM).order_by(UserORM.id)).all()
+            return [User.model_validate(user) for user in users]
 
     # --- MovieRepository protocol ---
 

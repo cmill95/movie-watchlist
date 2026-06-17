@@ -1,0 +1,5 @@
+<span id="current-user-name">
+  <button hx-get="/ui/users/{{ current_user.id }}/edit"
+          hx-target="#current-user-name"
+          hx-swap="outerHTML">Edit Name</button>
+</span>

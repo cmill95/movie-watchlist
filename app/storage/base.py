@@ -14,6 +14,10 @@ from typing import Protocol
 from app.models import MovieCreate, MovieRead, MovieUpdate
 
 
+class DuplicateUserName(ValueError):
+    """Raised when a user name would collide with an existing user."""
+
+
 class MovieRepository(Protocol):
     def create(self, data: MovieCreate) -> MovieRead: ...
     def get(self, movie_id: int) -> MovieRead | None: ...

@@ -1,0 +1,11 @@
+<span id="current-user-name">
+  <input type="text" name="name" value="{{ current_user.name }}" required maxlength="100">
+  <button hx-patch="/ui/users/{{ current_user.id }}"
+          hx-include="closest span"
+          hx-target="#current-user-name"
+          hx-swap="outerHTML">Save</button>
+  <button type="button"
+          hx-get="/ui/users/{{ current_user.id }}"
+          hx-target="#current-user-name"
+          hx-swap="outerHTML">Cancel</button>
+</span>

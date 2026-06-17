@@ -9,12 +9,13 @@ from functools import lru_cache
 from sqlalchemy import Engine
 
 from app.config import get_settings
-from app.storage.base import MovieRepository
+from app.storage.base import DuplicateUserName, MovieRepository
 from app.storage.sqlalchemy_repo import SqlAlchemyMovieRepository, make_engine
 from app.storage.sqlite_repo import SqliteMovieRepository
 
 __all__ = [
     "DEFAULT_USER_ID",
+    "DuplicateUserName",
     "MovieRepository",
     "SqlAlchemyMovieRepository",
     "SqliteMovieRepository",
@@ -48,8 +49,13 @@ def make_repository(user_id: int) -> SqliteMovieRepository | SqlAlchemyMovieRepo
     return SqliteMovieRepository(settings.movies_db_path, user_id)
 
 
+DEFAULT_USER_NAME = "Default"
+
+
 def init_storage() -> None:
-    """One-time startup. Ensures the schema exists and the default user is seeded."""
+    """One-time startup. Ensures the schema exists and the default user is seeded.
+
+    The app ships with a single user named "Default"; clients add more from the UI."""
     repo = make_repository(DEFAULT_USER_ID)
     repo.init_schema()
-    repo.ensure_user(DEFAULT_USER_ID, "default")
+    repo.ensure_user(DEFAULT_USER_ID, DEFAULT_USER_NAME)

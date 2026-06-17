@@ -7,6 +7,8 @@
 
 A small FastAPI + HTMX app for tracking movies you want to watch and movies you've watched. Each movie has a title, optional year, status (to-watch or watched), optional 1-10 rating, and optional notes. Data is persisted in a local SQLite database.
 
+The app is multi-user: each user keeps their own watchlist. It ships with a single user named "Default"; from the UI you can switch users, add a new user (a name is required and must be unique), and rename the current user. The active user is tracked in a `user_id` cookie.
+
 
 ## Stack
 
@@ -115,14 +117,21 @@ The app exposes two parallel sets of endpoints: a JSON API for programmatic acce
 
 These return HTML fragments and are consumed by the browser UI, not intended for direct use.
 
-| Method | Path                          | Returns                  |
-|--------|-------------------------------|--------------------------|
-| GET    | `/`                           | Full page                |
-| POST   | `/ui/movies`                  | New movie row            |
-| GET    | `/ui/movies/{movie_id}`       | Movie row (read mode)    |
-| GET    | `/ui/movies/{movie_id}/edit`  | Movie row (edit mode)    |
-| PATCH  | `/ui/movies/{movie_id}`       | Movie row (read mode)    |
-| DELETE | `/ui/movies/{movie_id}`       | Empty 200 response       |
+| Method | Path                          | Returns                          |
+|--------|-------------------------------|----------------------------------|
+| GET    | `/`                           | Full page                        |
+| POST   | `/ui/movies`                  | New movie row                    |
+| GET    | `/ui/movies/{movie_id}`       | Movie row (read mode)            |
+| GET    | `/ui/movies/{movie_id}/edit`  | Movie row (edit mode)            |
+| PATCH  | `/ui/movies/{movie_id}`       | Movie row (read mode)            |
+| DELETE | `/ui/movies/{movie_id}`       | Empty 200 response               |
+| POST   | `/ui/switch-user`             | Sets `user_id` cookie, redirects |
+| POST   | `/ui/users`                   | Adds a user, switches to them    |
+| GET    | `/ui/users/{user_id}`         | Current-user name (read mode)    |
+| GET    | `/ui/users/{user_id}/edit`    | Current-user name (edit mode)    |
+| PATCH  | `/ui/users/{user_id}`         | Renames the user, redirects      |
+
+Adding or renaming a user requires a non-empty name and rejects duplicates with `409 Conflict`.
 
 ## Storage
 
@@ -132,6 +141,8 @@ The data layer sits behind a `MovieRepository` protocol (`app/storage/base.py`) 
 - `SqlAlchemyMovieRepository` — the same operations on the SQLAlchemy 2.0 ORM.
 
 Both persist to a SQLite file. `MOVIES_BACKEND` (`sqlite` or `sqlalchemy`, default `sqlite`) selects one at runtime, injected through `Depends(get_repository)`, so the routes never know which is in use. Lifecycle methods (`init_schema`, `reset`, `dispose`) live on the concrete classes, not the protocol — they're setup/teardown concerns, not route operations.
+
+User management lives on the concrete repositories too, deliberately off the `MovieRepository` protocol: `ensure_user`, `create_user`, `get_user`, `rename_user`, and `list_users`. Movies are scoped to their owner via a `user_id` foreign key, and each repository is bound to one user at construction. `create_user`/`rename_user` raise `DuplicateUserName` on a name collision (the routes translate it to `409`). On startup, `init_storage` seeds a single user named "Default".
 
 ### Notes on building both backends
 

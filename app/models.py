@@ -14,7 +14,7 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Annotated
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator
 
 
 class MovieStatus(StrEnum):
@@ -27,6 +27,8 @@ Title = Annotated[str, Field(min_length=1, max_length=200)]
 Year = Annotated[int, Field(ge=1888, le=2100)]
 Rating = Annotated[int, Field(ge=1, le=10)]
 Notes = Annotated[str, Field(min_length=1, max_length=2000)]
+# Whitespace is trimmed first, so a blank or spaces-only name fails the min_length.
+Name = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)]
 
 
 class MovieCreate(BaseModel):
@@ -70,3 +72,10 @@ class MovieRead(BaseModel):
     notes: str | None
     created_at: datetime
     updated_at: datetime
+
+
+class User(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    name: str

@@ -3,6 +3,20 @@
 {% block content %}
 <header>
   <h1>Movie Watchlist</h1>
+  <label for="user-switcher">Viewing as</label>
+  <select id="user-switcher" name="user_id"
+          hx-post="/ui/switch-user" hx-trigger="change">
+    {% for user in users %}
+      <option value="{{ user.id }}" {% if user.id == current_user_id %}selected{% endif %}>{{ user.name }}</option>
+    {% endfor %}
+  </select>
+  {% set current_user = users | selectattr("id", "equalto", current_user_id) | first %}
+  {% if current_user %}{% include "_user_name.html" %}{% endif %}
+  <form id="add-user-form" hx-post="/ui/users" hx-trigger="submit">
+    <label for="new-user-name">Add user</label>
+    <input id="new-user-name" name="name" type="text" maxlength="100" required>
+    <button type="submit">Add</button>
+  </form>
 </header>
 
 <section aria-labelledby="add-heading">

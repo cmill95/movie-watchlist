@@ -9,9 +9,21 @@ from fastapi.responses import HTMLResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from app.models import MovieCreate, MovieRead, MovieStatus, MovieUpdate, Notes, Rating, Title, Year
+from app.models import (
+    MovieCreate,
+    MovieRead,
+    MovieStatus,
+    MovieUpdate,
+    Name,
+    Notes,
+    Rating,
+    Title,
+    User,
+    Year,
+)
 from app.storage import (
     DEFAULT_USER_ID,
+    DuplicateUserName,
     MovieRepository,
     dispose_engine,
     init_storage,
@@ -42,6 +54,10 @@ def get_repository(user_id: Annotated[int, Depends(get_current_user)]) -> MovieR
     return make_repository(user_id)
 
 
+def get_users() -> list[User]:
+    return make_repository(DEFAULT_USER_ID).list_users()
+
+
 app = FastAPI(title="Movie Watchlist", version="0.1.0", lifespan=lifespan)
 
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
@@ -51,18 +67,78 @@ templates = Jinja2Templates(directory="app/templates")
 # because it is lru_cached
 RepoDep = Annotated[MovieRepository, Depends(get_repository)]
 
+UsersDep = Annotated[list[User], Depends(get_users)]
+
 
 # --- HTML/HTMX Endpoints
 
 
 @app.get("/", response_class=HTMLResponse)
-def index(request: Request, repo: RepoDep):
+def index(
+    request: Request,
+    repo: RepoDep,
+    users: UsersDep,
+    current_user_id: Annotated[int, Depends(get_current_user)],
+):
     movies = repo.list_all()
     return templates.TemplateResponse(
         request=request,
         name="index.html",
-        context={"movies": movies},
+        context={"movies": movies, "users": users, "current_user_id": current_user_id},
     )
+
+
+@app.post("/ui/switch-user")
+def switch_user(user_id: Annotated[int, Form()]) -> Response:
+    response = Response(headers={"HX-Redirect": "/"})
+    response.set_cookie("user_id", str(user_id))
+    return response
+
+
+@app.post("/ui/users")
+def add_user(name: Annotated[Name, Form()]) -> Response:
+    try:
+        user = make_repository(DEFAULT_USER_ID).create_user(name)
+    except DuplicateUserName:
+        raise HTTPException(
+            http_status.HTTP_409_CONFLICT, detail="That name is already taken"
+        ) from None
+    response = Response(headers={"HX-Redirect": "/"})
+    response.set_cookie("user_id", str(user.id))
+    return response
+
+
+@app.get("/ui/users/{user_id}", response_class=HTMLResponse)
+def ui_get_user(request: Request, user_id: int):
+    user = make_repository(DEFAULT_USER_ID).get_user(user_id)
+    if user is None:
+        raise HTTPException(http_status.HTTP_404_NOT_FOUND, detail="User not found")
+    return templates.TemplateResponse(
+        request=request, name="_user_name.html", context={"current_user": user}
+    )
+
+
+@app.get("/ui/users/{user_id}/edit", response_class=HTMLResponse)
+def ui_edit_user_form(request: Request, user_id: int):
+    user = make_repository(DEFAULT_USER_ID).get_user(user_id)
+    if user is None:
+        raise HTTPException(http_status.HTTP_404_NOT_FOUND, detail="User not found")
+    return templates.TemplateResponse(
+        request=request, name="_user_name_edit.html", context={"current_user": user}
+    )
+
+
+@app.patch("/ui/users/{user_id}")
+def rename_user(user_id: int, name: Annotated[Name, Form()]) -> Response:
+    try:
+        renamed = make_repository(DEFAULT_USER_ID).rename_user(user_id, name)
+    except DuplicateUserName:
+        raise HTTPException(
+            http_status.HTTP_409_CONFLICT, detail="That name is already taken"
+        ) from None
+    if renamed is None:
+        raise HTTPException(http_status.HTTP_404_NOT_FOUND, detail="User not found")
+    return Response(headers={"HX-Redirect": "/"})
 
 
 @app.get("/ui/movies/{movie_id}", response_class=HTMLResponse)

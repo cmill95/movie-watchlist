@@ -747,3 +747,98 @@ def test_lifespan_initializes_storage():
 
     with TestClient(app) as client:
         assert client.get("/health").status_code == 200
+
+
+# ============================================================================
+# Tests for mutliple users
+# ============================================================================
+
+
+def test_switch_user_sets_cookie_and_redirects(identity_client):
+    resp = identity_client.post("/ui/switch-user", data={"user_id": "2"})
+    assert resp.headers["HX-Redirect"] == "/"
+    assert resp.cookies.get("user_id") == "2"
+
+
+def test_index_renders_user_switcher(identity_client):
+    html = identity_client.get("/").text  # no cookie -> default user 1 (alice)
+    assert "Alice" in html
+    assert "Bob" in html
+    assert 'value="1" selected' in html
+
+
+def test_index_renders_add_user_form(identity_client):
+    html = identity_client.get("/").text
+    assert 'hx-post="/ui/users"' in html
+    assert 'name="name"' in html
+
+
+def test_add_user_creates_and_switches_to_them(identity_client):
+    resp = identity_client.post("/ui/users", data={"name": "Dana"})
+    assert resp.headers["HX-Redirect"] == "/"
+    new_id = resp.cookies.get("user_id")
+    assert new_id is not None
+    # The new user is now selectable in the switcher.
+    assert "Dana" in identity_client.get("/").text
+
+
+def test_add_user_trims_and_requires_a_name(identity_client):
+    assert identity_client.post("/ui/users", data={"name": ""}).status_code == 422
+    assert identity_client.post("/ui/users", data={"name": "   "}).status_code == 422
+
+
+def test_add_user_rejects_duplicate_name(identity_client):
+    # identity_client seeds Alice (1) and Bob (2).
+    assert identity_client.post("/ui/users", data={"name": "Alice"}).status_code == 409
+
+
+def test_index_renders_current_user_with_edit_button(identity_client):
+    html = identity_client.get("/").text  # no cookie -> default user 1 (Alice)
+    assert "Alice" in html
+    assert 'hx-get="/ui/users/1/edit"' in html
+
+
+def test_edit_user_fragment_returns_prefilled_input(identity_client):
+    html = identity_client.get("/ui/users/1/edit").text
+    assert 'name="name"' in html
+    assert 'value="Alice"' in html
+    assert 'hx-patch="/ui/users/1"' in html
+
+
+def test_edit_unknown_user_returns_404(identity_client):
+    assert identity_client.get("/ui/users/9999/edit").status_code == 404
+
+
+def test_get_user_fragment_returns_display(identity_client):
+    html = identity_client.get("/ui/users/1").text
+    assert "Edit Name" in html
+    assert 'hx-get="/ui/users/1/edit"' in html
+
+
+def test_get_unknown_user_returns_404(identity_client):
+    assert identity_client.get("/ui/users/9999").status_code == 404
+
+
+def test_rename_user_updates_name(identity_client):
+    resp = identity_client.patch("/ui/users/1", data={"name": "Alicia"})
+    assert resp.headers["HX-Redirect"] == "/"
+    assert "Alicia" in identity_client.get("/").text
+
+
+def test_rename_unknown_user_returns_404(identity_client):
+    resp = identity_client.patch("/ui/users/9999", data={"name": "Ghost"})
+    assert resp.status_code == 404
+
+
+def test_rename_user_requires_a_name(identity_client):
+    assert identity_client.patch("/ui/users/1", data={"name": "   "}).status_code == 422
+
+
+def test_rename_user_rejects_duplicate_name(identity_client):
+    # user 1 is Alice, user 2 is Bob -> renaming Alice to Bob collides.
+    assert identity_client.patch("/ui/users/1", data={"name": "Bob"}).status_code == 409
+
+
+def test_rename_user_to_its_own_name_is_allowed(identity_client):
+    resp = identity_client.patch("/ui/users/1", data={"name": "Alice"})
+    assert resp.headers["HX-Redirect"] == "/"

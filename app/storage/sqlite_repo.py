@@ -15,7 +15,8 @@ import sqlite3
 from datetime import UTC, datetime
 from pathlib import Path
 
-from app.models import MovieCreate, MovieRead, MovieUpdate
+from app.models import MovieCreate, MovieRead, MovieUpdate, User
+from app.storage.base import DuplicateUserName
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS users (
@@ -83,14 +84,47 @@ class SqliteMovieRepository:
             conn.executescript(_SCHEMA)
 
     def reset(self) -> None:
-        """Clear all movies and reset the id sequence. For tests."""
+        """Clear all movies and users and reset the id sequences. For tests.
+
+        Mirrors the SQLAlchemy backend's drop/recreate: both must wipe users,
+        otherwise rows leak across tests on a shared DB."""
         with contextlib.closing(self._connect()) as conn, conn:
             conn.execute("DELETE FROM movies")
-            conn.execute("DELETE FROM sqlite_sequence WHERE name = 'movies'")
+            conn.execute("DELETE FROM users")
+            conn.execute("DELETE FROM sqlite_sequence WHERE name IN ('movies', 'users')")
 
     def ensure_user(self, user_id: int, name: str) -> None:
         with contextlib.closing(self._connect()) as conn, conn:
             conn.execute("INSERT OR IGNORE INTO users (id, name) VALUES (?, ?)", (user_id, name))
+
+    def create_user(self, name: str) -> User:
+        with contextlib.closing(self._connect()) as conn, conn:
+            if conn.execute("SELECT 1 FROM users WHERE name = ?", (name,)).fetchone():
+                raise DuplicateUserName(name)
+            cursor = conn.execute("INSERT INTO users (name) VALUES (?)", (name,))
+        assert cursor.lastrowid is not None  # INSERT always sets lastrowid
+        return User(id=cursor.lastrowid, name=name)
+
+    def get_user(self, user_id: int) -> User | None:
+        with contextlib.closing(self._connect()) as conn:
+            row = conn.execute("SELECT id, name FROM users WHERE id = ?", (user_id,)).fetchone()
+        return User(id=row["id"], name=row["name"]) if row is not None else None
+
+    def rename_user(self, user_id: int, name: str) -> User | None:
+        with contextlib.closing(self._connect()) as conn, conn:
+            if conn.execute(
+                "SELECT 1 FROM users WHERE name = ? AND id != ?", (name, user_id)
+            ).fetchone():
+                raise DuplicateUserName(name)
+            cursor = conn.execute("UPDATE users SET name = ? WHERE id = ?", (name, user_id))
+            if cursor.rowcount == 0:
+                return None
+        return User(id=user_id, name=name)
+
+    def list_users(self) -> list[User]:
+        with contextlib.closing(self._connect()) as conn:
+            rows = conn.execute("SELECT id, name FROM users ORDER BY id ASC").fetchall()
+        return [User(id=row["id"], name=row["name"]) for row in rows]
 
     # --- MovieRepository protocol
 
