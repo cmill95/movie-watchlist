@@ -48,3 +48,7 @@ docker-run:
 clean:
     rm -rf .pytest_cache .ruff_cache htmlcov .coverage coverage.xml
     find . -type d -name __pycache__ -exec rm -rf {} +
+
+# Reset all movies and users
+reset-db:
+    rm -f movies.db movies.db-wal movies.db-shm movies.db-journal
