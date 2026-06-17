@@ -9,7 +9,7 @@ dependencies = [
     "jinja2>=3.1.6",
     "pydantic-settings>=2.14.1",
     "python-multipart>=0.0.32",
-    "sqlalchemy>=2.0.50",
+    "sqlalchemy>=2.0.51",
 ]
 
 [dependency-groups]
