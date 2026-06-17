@@ -15,7 +15,7 @@ from pathlib import Path
 from sqlalchemy import DateTime, Engine, ForeignKey, create_engine, select
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
 
-from app.models import MovieCreate, MovieRead, MovieUpdate
+from app.models import MovieCreate, MovieRead, MovieUpdate, User
 
 
 class Base(DeclarativeBase):
@@ -99,6 +99,11 @@ class SqlAlchemyMovieRepository:
             if session.get(UserORM, user_id) is None:
                 session.add(UserORM(id=user_id, name=name))
                 session.commit()
+
+    def list_users(self) -> list[User]:
+        with self._sessions() as session:
+            users = session.scalars(select(UserORM).order_by(UserORM.id)).all()
+            return [User.model_validate(user) for user in users]
 
     # --- MovieRepository protocol ---
 

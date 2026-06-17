@@ -15,7 +15,7 @@ import sqlite3
 from datetime import UTC, datetime
 from pathlib import Path
 
-from app.models import MovieCreate, MovieRead, MovieUpdate
+from app.models import MovieCreate, MovieRead, MovieUpdate, User
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS users (
@@ -91,6 +91,11 @@ class SqliteMovieRepository:
     def ensure_user(self, user_id: int, name: str) -> None:
         with contextlib.closing(self._connect()) as conn, conn:
             conn.execute("INSERT OR IGNORE INTO users (id, name) VALUES (?, ?)", (user_id, name))
+
+    def list_users(self) -> list[User]:
+        with contextlib.closing(self._connect()) as conn:
+            rows = conn.execute("SELECT id, name FROM users ORDER BY id ASC").fetchall()
+        return [User(id=row["id"], name=row["name"]) for row in rows]
 
     # --- MovieRepository protocol
 

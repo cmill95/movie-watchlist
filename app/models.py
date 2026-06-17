@@ -70,3 +70,10 @@ class MovieRead(BaseModel):
     notes: str | None
     created_at: datetime
     updated_at: datetime
+
+
+class User(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    name: str
