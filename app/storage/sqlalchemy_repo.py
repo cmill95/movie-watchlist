@@ -107,6 +107,20 @@ class SqlAlchemyMovieRepository:
             session.commit()
             return User.model_validate(user)
 
+    def get_user(self, user_id: int) -> User | None:
+        with self._sessions() as session:
+            user = session.get(UserORM, user_id)
+            return User.model_validate(user) if user is not None else None
+
+    def rename_user(self, user_id: int, name: str) -> User | None:
+        with self._sessions() as session:
+            user = session.get(UserORM, user_id)
+            if user is None:
+                return None
+            user.name = name
+            session.commit()
+            return User.model_validate(user)
+
     def list_users(self) -> list[User]:
         with self._sessions() as session:
             users = session.scalars(select(UserORM).order_by(UserORM.id)).all()

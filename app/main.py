@@ -102,6 +102,33 @@ def add_user(name: Annotated[Name, Form()]) -> Response:
     return response
 
 
+@app.get("/ui/users/{user_id}", response_class=HTMLResponse)
+def ui_get_user(request: Request, user_id: int):
+    user = make_repository(DEFAULT_USER_ID).get_user(user_id)
+    if user is None:
+        raise HTTPException(http_status.HTTP_404_NOT_FOUND, detail="User not found")
+    return templates.TemplateResponse(
+        request=request, name="_user_name.html", context={"current_user": user}
+    )
+
+
+@app.get("/ui/users/{user_id}/edit", response_class=HTMLResponse)
+def ui_edit_user_form(request: Request, user_id: int):
+    user = make_repository(DEFAULT_USER_ID).get_user(user_id)
+    if user is None:
+        raise HTTPException(http_status.HTTP_404_NOT_FOUND, detail="User not found")
+    return templates.TemplateResponse(
+        request=request, name="_user_name_edit.html", context={"current_user": user}
+    )
+
+
+@app.patch("/ui/users/{user_id}")
+def rename_user(user_id: int, name: Annotated[Name, Form()]) -> Response:
+    if make_repository(DEFAULT_USER_ID).rename_user(user_id, name) is None:
+        raise HTTPException(http_status.HTTP_404_NOT_FOUND, detail="User not found")
+    return Response(headers={"HX-Redirect": "/"})
+
+
 @app.get("/ui/movies/{movie_id}", response_class=HTMLResponse)
 def ui_get_movie(request: Request, movie_id: int, repo: RepoDep):
     movie = repo.get(movie_id)

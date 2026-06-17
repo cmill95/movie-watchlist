@@ -102,6 +102,18 @@ class SqliteMovieRepository:
         assert cursor.lastrowid is not None  # INSERT always sets lastrowid
         return User(id=cursor.lastrowid, name=name)
 
+    def get_user(self, user_id: int) -> User | None:
+        with contextlib.closing(self._connect()) as conn:
+            row = conn.execute("SELECT id, name FROM users WHERE id = ?", (user_id,)).fetchone()
+        return User(id=row["id"], name=row["name"]) if row is not None else None
+
+    def rename_user(self, user_id: int, name: str) -> User | None:
+        with contextlib.closing(self._connect()) as conn, conn:
+            cursor = conn.execute("UPDATE users SET name = ? WHERE id = ?", (name, user_id))
+            if cursor.rowcount == 0:
+                return None
+        return User(id=user_id, name=name)
+
     def list_users(self) -> list[User]:
         with contextlib.closing(self._connect()) as conn:
             rows = conn.execute("SELECT id, name FROM users ORDER BY id ASC").fetchall()
