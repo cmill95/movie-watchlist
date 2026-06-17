@@ -100,6 +100,13 @@ class SqlAlchemyMovieRepository:
                 session.add(UserORM(id=user_id, name=name))
                 session.commit()
 
+    def create_user(self, name: str) -> User:
+        with self._sessions() as session:
+            user = UserORM(name=name)
+            session.add(user)
+            session.commit()
+            return User.model_validate(user)
+
     def list_users(self) -> list[User]:
         with self._sessions() as session:
             users = session.scalars(select(UserORM).order_by(UserORM.id)).all()

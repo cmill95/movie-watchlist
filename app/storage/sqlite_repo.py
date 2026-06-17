@@ -96,6 +96,12 @@ class SqliteMovieRepository:
         with contextlib.closing(self._connect()) as conn, conn:
             conn.execute("INSERT OR IGNORE INTO users (id, name) VALUES (?, ?)", (user_id, name))
 
+    def create_user(self, name: str) -> User:
+        with contextlib.closing(self._connect()) as conn, conn:
+            cursor = conn.execute("INSERT INTO users (name) VALUES (?)", (name,))
+        assert cursor.lastrowid is not None  # INSERT always sets lastrowid
+        return User(id=cursor.lastrowid, name=name)
+
     def list_users(self) -> list[User]:
         with contextlib.closing(self._connect()) as conn:
             rows = conn.execute("SELECT id, name FROM users ORDER BY id ASC").fetchall()

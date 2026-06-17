@@ -14,6 +14,7 @@ from app.models import (
     MovieRead,
     MovieStatus,
     MovieUpdate,
+    Name,
     Notes,
     Rating,
     Title,
@@ -90,6 +91,14 @@ def index(
 def switch_user(user_id: Annotated[int, Form()]) -> Response:
     response = Response(headers={"HX-Redirect": "/"})
     response.set_cookie("user_id", str(user_id))
+    return response
+
+
+@app.post("/ui/users")
+def add_user(name: Annotated[Name, Form()]) -> Response:
+    user = make_repository(DEFAULT_USER_ID).create_user(name)
+    response = Response(headers={"HX-Redirect": "/"})
+    response.set_cookie("user_id", str(user.id))
     return response
 
 

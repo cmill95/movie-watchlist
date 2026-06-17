@@ -96,6 +96,13 @@ def test_update_status(repo):
     assert updated.status == MovieStatus.WATCHED
 
 
+def test_create_user_assigns_id_and_lists(repo):
+    created = repo.create_user("Taylor")
+    assert created.id is not None
+    assert created.name == "Taylor"
+    assert created in repo.list_users()
+
+
 def test_movies_are_scoped_to_owner(two_owners):
     alice, bob = two_owners
     a = alice.create(MovieCreate(title="Alice's"))

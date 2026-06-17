@@ -10,6 +10,11 @@
       <option value="{{ user.id }}" {% if user.id == current_user_id %}selected{% endif %}>{{ user.name }}</option>
     {% endfor %}
   </select>
+  <form id="add-user-form" hx-post="/ui/users" hx-trigger="submit">
+    <label for="new-user-name">Add user</label>
+    <input id="new-user-name" name="name" type="text" maxlength="100" required>
+    <button type="submit">Add</button>
+  </form>
 </header>
 
 <section aria-labelledby="add-heading">

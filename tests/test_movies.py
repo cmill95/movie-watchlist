@@ -765,3 +765,23 @@ def test_index_renders_user_switcher(identity_client):
     assert "Alice" in html
     assert "Bob" in html
     assert 'value="1" selected' in html
+
+
+def test_index_renders_add_user_form(identity_client):
+    html = identity_client.get("/").text
+    assert 'hx-post="/ui/users"' in html
+    assert 'name="name"' in html
+
+
+def test_add_user_creates_and_switches_to_them(identity_client):
+    resp = identity_client.post("/ui/users", data={"name": "Dana"})
+    assert resp.headers["HX-Redirect"] == "/"
+    new_id = resp.cookies.get("user_id")
+    assert new_id is not None
+    # The new user is now selectable in the switcher.
+    assert "Dana" in identity_client.get("/").text
+
+
+def test_add_user_trims_and_requires_a_name(identity_client):
+    assert identity_client.post("/ui/users", data={"name": ""}).status_code == 422
+    assert identity_client.post("/ui/users", data={"name": "   "}).status_code == 422

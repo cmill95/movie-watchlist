@@ -48,12 +48,13 @@ def make_repository(user_id: int) -> SqliteMovieRepository | SqlAlchemyMovieRepo
     return SqliteMovieRepository(settings.movies_db_path, user_id)
 
 
-_DEMO_USERS = [(1, "Alice"), (2, "Bob"), (3, "Carol")]
+DEFAULT_USER_NAME = "Default"
 
 
 def init_storage() -> None:
-    """One-time startup. Ensures the schema exists and the default user is seeded."""
+    """One-time startup. Ensures the schema exists and the default user is seeded.
+
+    The app ships with a single user named "Default"; clients add more from the UI."""
     repo = make_repository(DEFAULT_USER_ID)
     repo.init_schema()
-    for user_id, name in _DEMO_USERS:
-        repo.ensure_user(user_id, name)
+    repo.ensure_user(DEFAULT_USER_ID, DEFAULT_USER_NAME)
