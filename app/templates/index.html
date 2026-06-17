@@ -3,6 +3,13 @@
 {% block content %}
 <header>
   <h1>Movie Watchlist</h1>
+  <label for="user-switcher">Viewing as</label>
+  <select id="user-switcher" name="user_id"
+          hx-post="/ui/switch-user" hx-trigger="change">
+    {% for user in users %}
+      <option value="{{ user.id }}" {% if user.id == current_user_id %}selected{% endif %}>{{ user.name }}</option>
+    {% endfor %}
+  </select>
 </header>
 
 <section aria-labelledby="add-heading">

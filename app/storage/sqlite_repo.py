@@ -83,10 +83,14 @@ class SqliteMovieRepository:
             conn.executescript(_SCHEMA)
 
     def reset(self) -> None:
-        """Clear all movies and reset the id sequence. For tests."""
+        """Clear all movies and users and reset the id sequences. For tests.
+
+        Mirrors the SQLAlchemy backend's drop/recreate: both must wipe users,
+        otherwise rows leak across tests on a shared DB."""
         with contextlib.closing(self._connect()) as conn, conn:
             conn.execute("DELETE FROM movies")
-            conn.execute("DELETE FROM sqlite_sequence WHERE name = 'movies'")
+            conn.execute("DELETE FROM users")
+            conn.execute("DELETE FROM sqlite_sequence WHERE name IN ('movies', 'users')")
 
     def ensure_user(self, user_id: int, name: str) -> None:
         with contextlib.closing(self._connect()) as conn, conn:

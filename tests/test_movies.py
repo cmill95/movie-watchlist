@@ -747,3 +747,21 @@ def test_lifespan_initializes_storage():
 
     with TestClient(app) as client:
         assert client.get("/health").status_code == 200
+
+
+# ============================================================================
+# Tests for mutliple users
+# ============================================================================
+
+
+def test_switch_user_sets_cookie_and_redirects(identity_client):
+    resp = identity_client.post("/ui/switch-user", data={"user_id": "2"})
+    assert resp.headers["HX-Redirect"] == "/"
+    assert resp.cookies.get("user_id") == "2"
+
+
+def test_index_renders_user_switcher(identity_client):
+    html = identity_client.get("/").text  # no cookie -> default user 1 (alice)
+    assert "Alice" in html
+    assert "Bob" in html
+    assert 'value="1" selected' in html

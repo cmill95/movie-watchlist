@@ -120,6 +120,6 @@ def identity_client():
     admin = SqliteMovieRepository(get_settings().movies_db_path, 1)
     admin.init_schema()
     admin.reset()
-    admin.ensure_user(1, "alice")
-    admin.ensure_user(2, "bob")
+    admin.ensure_user(1, "Alice")
+    admin.ensure_user(2, "Bob")
     return TestClient(app)

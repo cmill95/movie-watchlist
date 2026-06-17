@@ -9,7 +9,17 @@ from fastapi.responses import HTMLResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from app.models import MovieCreate, MovieRead, MovieStatus, MovieUpdate, Notes, Rating, Title, Year
+from app.models import (
+    MovieCreate,
+    MovieRead,
+    MovieStatus,
+    MovieUpdate,
+    Notes,
+    Rating,
+    Title,
+    User,
+    Year,
+)
 from app.storage import (
     DEFAULT_USER_ID,
     MovieRepository,
@@ -42,6 +52,10 @@ def get_repository(user_id: Annotated[int, Depends(get_current_user)]) -> MovieR
     return make_repository(user_id)
 
 
+def get_users() -> list[User]:
+    return make_repository(DEFAULT_USER_ID).list_users()
+
+
 app = FastAPI(title="Movie Watchlist", version="0.1.0", lifespan=lifespan)
 
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
@@ -51,18 +65,32 @@ templates = Jinja2Templates(directory="app/templates")
 # because it is lru_cached
 RepoDep = Annotated[MovieRepository, Depends(get_repository)]
 
+UsersDep = Annotated[list[User], Depends(get_users)]
+
 
 # --- HTML/HTMX Endpoints
 
 
 @app.get("/", response_class=HTMLResponse)
-def index(request: Request, repo: RepoDep):
+def index(
+    request: Request,
+    repo: RepoDep,
+    users: UsersDep,
+    current_user_id: Annotated[int, Depends(get_current_user)],
+):
     movies = repo.list_all()
     return templates.TemplateResponse(
         request=request,
         name="index.html",
-        context={"movies": movies},
+        context={"movies": movies, "users": users, "current_user_id": current_user_id},
     )
+
+
+@app.post("/ui/switch-user")
+def switch_user(user_id: Annotated[int, Form()]) -> Response:
+    response = Response(headers={"HX-Redirect": "/"})
+    response.set_cookie("user_id", str(user_id))
+    return response
 
 
 @app.get("/ui/movies/{movie_id}", response_class=HTMLResponse)
