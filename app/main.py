@@ -23,6 +23,7 @@ from app.models import (
 )
 from app.storage import (
     DEFAULT_USER_ID,
+    DuplicateUserName,
     MovieRepository,
     dispose_engine,
     init_storage,
@@ -96,7 +97,12 @@ def switch_user(user_id: Annotated[int, Form()]) -> Response:
 
 @app.post("/ui/users")
 def add_user(name: Annotated[Name, Form()]) -> Response:
-    user = make_repository(DEFAULT_USER_ID).create_user(name)
+    try:
+        user = make_repository(DEFAULT_USER_ID).create_user(name)
+    except DuplicateUserName:
+        raise HTTPException(
+            http_status.HTTP_409_CONFLICT, detail="That name is already taken"
+        ) from None
     response = Response(headers={"HX-Redirect": "/"})
     response.set_cookie("user_id", str(user.id))
     return response
@@ -124,7 +130,13 @@ def ui_edit_user_form(request: Request, user_id: int):
 
 @app.patch("/ui/users/{user_id}")
 def rename_user(user_id: int, name: Annotated[Name, Form()]) -> Response:
-    if make_repository(DEFAULT_USER_ID).rename_user(user_id, name) is None:
+    try:
+        renamed = make_repository(DEFAULT_USER_ID).rename_user(user_id, name)
+    except DuplicateUserName:
+        raise HTTPException(
+            http_status.HTTP_409_CONFLICT, detail="That name is already taken"
+        ) from None
+    if renamed is None:
         raise HTTPException(http_status.HTTP_404_NOT_FOUND, detail="User not found")
     return Response(headers={"HX-Redirect": "/"})
 

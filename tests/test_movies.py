@@ -787,6 +787,11 @@ def test_add_user_trims_and_requires_a_name(identity_client):
     assert identity_client.post("/ui/users", data={"name": "   "}).status_code == 422
 
 
+def test_add_user_rejects_duplicate_name(identity_client):
+    # identity_client seeds Alice (1) and Bob (2).
+    assert identity_client.post("/ui/users", data={"name": "Alice"}).status_code == 409
+
+
 def test_index_renders_current_user_with_edit_button(identity_client):
     html = identity_client.get("/").text  # no cookie -> default user 1 (Alice)
     assert "Alice" in html
@@ -827,3 +832,13 @@ def test_rename_unknown_user_returns_404(identity_client):
 
 def test_rename_user_requires_a_name(identity_client):
     assert identity_client.patch("/ui/users/1", data={"name": "   "}).status_code == 422
+
+
+def test_rename_user_rejects_duplicate_name(identity_client):
+    # user 1 is Alice, user 2 is Bob -> renaming Alice to Bob collides.
+    assert identity_client.patch("/ui/users/1", data={"name": "Bob"}).status_code == 409
+
+
+def test_rename_user_to_its_own_name_is_allowed(identity_client):
+    resp = identity_client.patch("/ui/users/1", data={"name": "Alice"})
+    assert resp.headers["HX-Redirect"] == "/"

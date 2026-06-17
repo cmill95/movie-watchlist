@@ -16,6 +16,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from app.models import MovieCreate, MovieRead, MovieUpdate, User
+from app.storage.base import DuplicateUserName
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS users (
@@ -98,6 +99,8 @@ class SqliteMovieRepository:
 
     def create_user(self, name: str) -> User:
         with contextlib.closing(self._connect()) as conn, conn:
+            if conn.execute("SELECT 1 FROM users WHERE name = ?", (name,)).fetchone():
+                raise DuplicateUserName(name)
             cursor = conn.execute("INSERT INTO users (name) VALUES (?)", (name,))
         assert cursor.lastrowid is not None  # INSERT always sets lastrowid
         return User(id=cursor.lastrowid, name=name)
@@ -109,6 +112,10 @@ class SqliteMovieRepository:
 
     def rename_user(self, user_id: int, name: str) -> User | None:
         with contextlib.closing(self._connect()) as conn, conn:
+            if conn.execute(
+                "SELECT 1 FROM users WHERE name = ? AND id != ?", (name, user_id)
+            ).fetchone():
+                raise DuplicateUserName(name)
             cursor = conn.execute("UPDATE users SET name = ? WHERE id = ?", (name, user_id))
             if cursor.rowcount == 0:
                 return None

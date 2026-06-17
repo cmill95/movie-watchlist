@@ -16,6 +16,7 @@ from sqlalchemy import DateTime, Engine, ForeignKey, create_engine, select
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
 
 from app.models import MovieCreate, MovieRead, MovieUpdate, User
+from app.storage.base import DuplicateUserName
 
 
 class Base(DeclarativeBase):
@@ -102,6 +103,8 @@ class SqlAlchemyMovieRepository:
 
     def create_user(self, name: str) -> User:
         with self._sessions() as session:
+            if session.scalar(select(UserORM).where(UserORM.name == name)) is not None:
+                raise DuplicateUserName(name)
             user = UserORM(name=name)
             session.add(user)
             session.commit()
@@ -114,6 +117,11 @@ class SqlAlchemyMovieRepository:
 
     def rename_user(self, user_id: int, name: str) -> User | None:
         with self._sessions() as session:
+            taken = session.scalar(
+                select(UserORM).where(UserORM.name == name, UserORM.id != user_id)
+            )
+            if taken is not None:
+                raise DuplicateUserName(name)
             user = session.get(UserORM, user_id)
             if user is None:
                 return None

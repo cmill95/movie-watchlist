@@ -9,12 +9,13 @@ from functools import lru_cache
 from sqlalchemy import Engine
 
 from app.config import get_settings
-from app.storage.base import MovieRepository
+from app.storage.base import DuplicateUserName, MovieRepository
 from app.storage.sqlalchemy_repo import SqlAlchemyMovieRepository, make_engine
 from app.storage.sqlite_repo import SqliteMovieRepository
 
 __all__ = [
     "DEFAULT_USER_ID",
+    "DuplicateUserName",
     "MovieRepository",
     "SqlAlchemyMovieRepository",
     "SqliteMovieRepository",
