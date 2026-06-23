@@ -36,7 +36,7 @@ def backend_repo(request):
         os.close(fd)
         from app.storage.sqlalchemy_repo import SqlAlchemyMovieRepository, make_engine
 
-        engine = make_engine(path)
+        engine = make_engine(f"sqlite:///{path}")
         repo = SqlAlchemyMovieRepository(engine, _TEST_USER_ID)
 
     repo.init_schema()
@@ -94,7 +94,7 @@ def two_owners(request, tmp_path):
     else:
         from app.storage.sqlalchemy_repo import SqlAlchemyMovieRepository, make_engine
 
-        engine = make_engine(db)
+        engine = make_engine(f"sqlite:///{db}")
         alice = SqlAlchemyMovieRepository(engine, 1)
         bob = SqlAlchemyMovieRepository(engine, 2)
 
