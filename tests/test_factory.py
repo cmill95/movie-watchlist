@@ -6,8 +6,9 @@ selection logic is only exercised here.
 """
 
 import pytest
+from pydantic import ValidationError
 
-from app.config import get_settings
+from app.config import Settings, get_settings
 from app.storage import (
     DEFAULT_USER_ID,
     SqlAlchemyMovieRepository,
@@ -39,3 +40,11 @@ def test_make_repository_selects_backend(backend, expected, monkeypatch):
     finally:
         dispose_engine()
         get_settings.cache_clear()
+
+
+def test_postgres_backend_requires_database_url(monkeypatch):
+    """Selecting postgres without a DSN fails loudly at config-load time."""
+    monkeypatch.setenv("MOVIES_BACKEND", "postgres")
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    with pytest.raises(ValidationError, match="DATABASE_URL is required"):
+        Settings()
