@@ -8,7 +8,8 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
     movies_db_path: str = "movies.db"
-    movies_backend: Literal["sqlite", "sqlalchemy"] = "sqlite"
+    movies_backend: Literal["sqlite", "postgres"] = "sqlite"
+    database_url: str = ""
 
 
 @lru_cache

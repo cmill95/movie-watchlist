@@ -26,12 +26,12 @@ __all__ = [
 
 @lru_cache
 def get_engine() -> Engine:
-    return make_engine(get_settings().movies_db_path)
+    return make_engine(get_settings().database_url)
 
 
 def dispose_engine() -> None:
     """Release the shared engine at shutdown. Only the ORM backend builds one."""
-    if get_settings().movies_backend == "sqlalchemy":
+    if get_settings().movies_backend == "postgres":
         get_engine().dispose()
         get_engine.cache_clear()
 
@@ -44,7 +44,7 @@ def make_repository(user_id: int) -> SqliteMovieRepository | SqlAlchemyMovieRepo
     off-Protocol lifecycle methods (init_schema/ensure_user) stay reachable for
     init_storage; the route-facing Protocol boundary is get_repository in main."""
     settings = get_settings()
-    if settings.movies_backend == "sqlalchemy":
+    if settings.movies_backend == "postgres":
         return SqlAlchemyMovieRepository(get_engine(), user_id)
     return SqliteMovieRepository(settings.movies_db_path, user_id)
 

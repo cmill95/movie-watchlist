@@ -1,16 +1,14 @@
 """SQLAlchemy 2.0 ORM implementation of the movie repository.
 
 Same MovieRepository protocol as the stdlib sqlite3 backend
-(app/storage/sqlite_repo.py), built on the ORM instead of raw SQL. Both
-persist to a SQLite file; the difference is the access layer, not the
-database.
+(app/storage/sqlite_repo.py), built on the ORM instead of raw SQL. The engine
+URL decides the database: SQLite for local/dev, Postgres in production.
 
 init_schema()/reset() are lifecycle/test concerns, deliberately off the
 protocol — same split as the sqlite backend.
 """
 
 from datetime import UTC, datetime
-from pathlib import Path
 
 from sqlalchemy import DateTime, Engine, ForeignKey, create_engine, select
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
@@ -70,11 +68,11 @@ def _to_read(movie: MovieORM) -> MovieRead:
     )
 
 
-def make_engine(db_path: Path | str) -> Engine:
-    return create_engine(
-        f"sqlite:///{Path(db_path)}",
-        connect_args={"check_same_thread": False},
-    )
+def make_engine(url: str) -> Engine:
+    # check_same_thread is a sqlite3-only connect arg (needed because FastAPI
+    # serves across threads); psycopg has no such parameter and would reject it.
+    connect_args = {"check_same_thread": False} if url.startswith("sqlite") else {}
+    return create_engine(url, connect_args=connect_args)
 
 
 class SqlAlchemyMovieRepository:
