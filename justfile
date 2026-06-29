@@ -44,6 +44,18 @@ build:
 docker-run:
     docker run -p 8000:8000 movie-watchlist
 
+# Start a local Postgres for running the app against (see .env.example)
+db-up:
+    docker compose up -d db
+
+# Stop the local Postgres (data is kept in the pgdata volume)
+db-down:
+    docker compose down
+
+# Stop the local Postgres and delete its data
+db-nuke:
+    docker compose down -v
+
 # Remove caches and build artifacts
 clean:
     rm -rf .pytest_cache .ruff_cache htmlcov .coverage coverage.xml

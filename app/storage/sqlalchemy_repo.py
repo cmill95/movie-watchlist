@@ -10,7 +10,7 @@ protocol — same split as the sqlite backend.
 
 from datetime import UTC, datetime
 
-from sqlalchemy import DateTime, Engine, ForeignKey, create_engine, select
+from sqlalchemy import DateTime, Engine, ForeignKey, create_engine, select, text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
 
 from app.models import MovieCreate, MovieRead, MovieUpdate, User
@@ -97,7 +97,24 @@ class SqlAlchemyMovieRepository:
         with self._sessions() as session:
             if session.get(UserORM, user_id) is None:
                 session.add(UserORM(id=user_id, name=name))
+                session.flush()  # make the row visible to the sequence sync below
+                self._sync_user_id_seq(session)
                 session.commit()
+
+    def _sync_user_id_seq(self, session) -> None:
+        """Advance the users id sequence past any explicitly-inserted id.
+
+        Postgres does not bump the identity sequence when a row is inserted with
+        an explicit id, so a later auto-id insert (create_user) would reuse that
+        id and collide. SQLite has no such sequence; this is a no-op there.
+        """
+        if self._engine.dialect.name != "postgresql":
+            return
+        session.execute(
+            text(
+                "SELECT setval(pg_get_serial_sequence('users', 'id'), (SELECT MAX(id) FROM users))"
+            )
+        )
 
     def create_user(self, name: str) -> User:
         with self._sessions() as session:

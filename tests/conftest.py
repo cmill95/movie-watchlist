@@ -16,13 +16,27 @@ def pytest_configure(config):
 _TEST_USER_ID = 1
 
 
-@pytest.fixture(scope="session", params=["sqlite", "sqlalchemy"])
+@pytest.fixture(scope="session")
+def postgres_url():
+    """A throwaway Postgres in a container, started once per session.
+
+    driver="psycopg" makes the URL use psycopg v3 (postgresql+psycopg://),
+    matching the driver installed in PR 1; the default would be psycopg2.
+    """
+    from testcontainers.postgres import PostgresContainer
+
+    with PostgresContainer("postgres:17-alpine", driver="psycopg") as pg:
+        yield pg.get_connection_url()
+
+
+@pytest.fixture(scope="session", params=["sqlite", "postgres"])
 def backend_repo(request):
     """One repository per backend, constructed once. Drives the MovieRepository
     contract test, which asserts both backends honor the same behavior.
 
-    The SQLAlchemy backend gets its own DB file: its drop/recreate reset would
-    otherwise clobber the schema the SQLite-backed API tests share.
+    The ORM backend runs against a real Postgres (the production target); the
+    raw backend runs against SQLite. Per-test isolation comes from the `repo`
+    fixture's reset(), not from rebuilding the database here.
     """
     from app.config import get_settings
 
@@ -32,11 +46,9 @@ def backend_repo(request):
 
         repo = SqliteMovieRepository(get_settings().movies_db_path, _TEST_USER_ID)
     else:
-        fd, path = tempfile.mkstemp(suffix=".db")
-        os.close(fd)
         from app.storage.sqlalchemy_repo import SqlAlchemyMovieRepository, make_engine
 
-        engine = make_engine(f"sqlite:///{path}")
+        engine = make_engine(request.getfixturevalue("postgres_url"))
         repo = SqlAlchemyMovieRepository(engine, _TEST_USER_ID)
 
     repo.init_schema()
@@ -80,25 +92,28 @@ def client():
         app.dependency_overrides.clear()
 
 
-@pytest.fixture(params=["sqlite", "sqlalchemy"])
+@pytest.fixture(params=["sqlite", "postgres"])
 def two_owners(request, tmp_path):
-    """A pair of repos bound to different users over one fresh db, for
-    exercising the per-user ownership boundary on each backend."""
-    db = str(tmp_path / "scoped.db")
+    """A pair of repos bound to different users over one db, for exercising the
+    per-user ownership boundary on each backend."""
     engine = None
     if request.param == "sqlite":
         from app.storage.sqlite_repo import SqliteMovieRepository
 
+        db = str(tmp_path / "scoped.db")
         alice = SqliteMovieRepository(db, 1)
         bob = SqliteMovieRepository(db, 2)
     else:
         from app.storage.sqlalchemy_repo import SqlAlchemyMovieRepository, make_engine
 
-        engine = make_engine(f"sqlite:///{db}")
+        engine = make_engine(request.getfixturevalue("postgres_url"))
         alice = SqlAlchemyMovieRepository(engine, 1)
         bob = SqlAlchemyMovieRepository(engine, 2)
 
     alice.init_schema()
+    if request.param == "postgres":
+        # Shared session container: clear leftover rows from earlier tests.
+        alice.reset()
     alice.ensure_user(1, "alice")
     alice.ensure_user(2, "bob")
     yield alice, bob
