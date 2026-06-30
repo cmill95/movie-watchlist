@@ -25,3 +25,9 @@ CVE-2026-48962 exp:2026-09-01
 CVE-2026-11822 exp:2026-09-01
 CVE-2026-11824 exp:2026-09-01
 CVE-2026-48959 exp:2026-09-01
+
+# acl symlink traversal privilege escalation — libacl1 (no fix yet)
+CVE-2026-54369 exp:2026-09-01
+
+# attr symlink traversal privilege escalation — libattr1 (no fix yet)
+CVE-2026-54371 exp:2026-09-01
