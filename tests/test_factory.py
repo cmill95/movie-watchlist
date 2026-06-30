@@ -51,6 +51,9 @@ def test_postgres_backend_requires_database_url(monkeypatch):
     """Selecting postgres without a DSN fails loudly at config-load time."""
     monkeypatch.setenv("MOVIES_BACKEND", "postgres")
     monkeypatch.delenv("DATABASE_URL", raising=False)
+    # Disable .env loading for this construction: a developer's .env could
+    # otherwise supply DATABASE_URL and mask the validation error this asserts.
+    monkeypatch.setitem(Settings.model_config, "env_file", None)
     with pytest.raises(ValidationError, match="DATABASE_URL is required"):
         Settings()
 
