@@ -53,9 +53,17 @@ DEFAULT_USER_NAME = "Default"
 
 
 def init_storage() -> None:
-    """One-time startup. Ensures the schema exists and the default user is seeded.
+    """One-time startup. Seeds the default user; for SQLite it also creates the schema.
+
+    The Postgres schema is managed by Alembic (`alembic upgrade head`, run as a
+    deploy step before the app starts), so we deliberately do not create_all here.
+    Seeding stays on boot for both backends: it's idempotent (ensure_user checks
+    first), and against an unmigrated Postgres it fails loudly, signaling that
+    migrations have not been run.
 
     The app ships with a single user named "Default"; clients add more from the UI."""
+    settings = get_settings()
     repo = make_repository(DEFAULT_USER_ID)
-    repo.init_schema()
+    if settings.movies_backend == "sqlite":
+        repo.init_schema()
     repo.ensure_user(DEFAULT_USER_ID, DEFAULT_USER_NAME)

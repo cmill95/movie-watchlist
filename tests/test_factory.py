@@ -5,15 +5,20 @@ construct backends directly and the API tests override the dependency, so the
 selection logic is only exercised here.
 """
 
+from unittest.mock import MagicMock
+
 import pytest
 from pydantic import ValidationError
 
+from app import storage
 from app.config import Settings, get_settings
 from app.storage import (
     DEFAULT_USER_ID,
+    DEFAULT_USER_NAME,
     SqlAlchemyMovieRepository,
     SqliteMovieRepository,
     dispose_engine,
+    init_storage,
     make_repository,
 )
 
@@ -48,3 +53,22 @@ def test_postgres_backend_requires_database_url(monkeypatch):
     monkeypatch.delenv("DATABASE_URL", raising=False)
     with pytest.raises(ValidationError, match="DATABASE_URL is required"):
         Settings()
+
+
+def test_init_storage_skips_schema_creation_for_postgres(monkeypatch):
+    """Postgres schema is owned by Alembic, so boot must not call init_schema.
+    Seeding the default user still runs (it's idempotent)."""
+    monkeypatch.setenv("MOVIES_BACKEND", "postgres")
+    monkeypatch.setenv("DATABASE_URL", "postgresql+psycopg://u:p@localhost:5432/movies")
+    get_settings.cache_clear()
+
+    repo = MagicMock()
+    monkeypatch.setattr(storage, "make_repository", lambda user_id: repo)
+
+    try:
+        init_storage()
+    finally:
+        get_settings.cache_clear()
+
+    repo.init_schema.assert_not_called()
+    repo.ensure_user.assert_called_once_with(DEFAULT_USER_ID, DEFAULT_USER_NAME)
