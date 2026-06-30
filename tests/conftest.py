@@ -7,10 +7,19 @@ import pytest
 
 
 def pytest_configure(config):
-    """Set the SQLite test DB path before app modules are imported."""
+    """Pin test config before app modules are imported.
+
+    The suite runs on SQLite (the contract tests reach Postgres directly via
+    testcontainers, not through settings). Env vars take precedence over the
+    .env file in pydantic-settings, so forcing the backend here keeps the suite
+    hermetic: a developer's .env selecting Postgres can't leak in and make tests
+    depend on a running database.
+    """
     fd, db_path = tempfile.mkstemp(suffix=".db")
     os.close(fd)
     os.environ["MOVIES_DB_PATH"] = db_path
+    os.environ["MOVIES_BACKEND"] = "sqlite"
+    os.environ.pop("DATABASE_URL", None)
 
 
 _TEST_USER_ID = 1

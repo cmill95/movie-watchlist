@@ -14,9 +14,11 @@ wheels/
 .pytest_cache/
 .ruff_cache/
 
-# SQLite databases (dev and test)
+# SQLite databases (dev and test), including WAL-mode sidecar files
 *.db
 *.db-journal
+*.db-wal
+*.db-shm
 
 # Coverage
 .coverage
