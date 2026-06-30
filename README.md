@@ -5,7 +5,7 @@
 
 # movie-watchlist
 
-A small FastAPI + HTMX app for tracking movies you want to watch and movies you've watched. Each movie has a title, optional year, status (to-watch or watched), optional 1-10 rating, and optional notes. Data is persisted in a local SQLite database.
+A small FastAPI + HTMX app for tracking movies you want to watch and movies you've watched. Each movie has a title, optional year, status (to-watch or watched), optional 1-10 rating, and optional notes. Data is persisted in SQLite by default, with Postgres available as an alternative backend (see [Run against Postgres](#run-against-postgres)).
 
 The app is multi-user: each user keeps their own watchlist. It ships with a single user named "Default"; from the UI you can switch users, add a new user (a name is required and must be unique), and rename the current user. The active user is tracked in a `user_id` cookie.
 
@@ -16,7 +16,8 @@ The app is multi-user: each user keeps their own watchlist. It ships with a sing
 - FastAPI for the backend
 - HTMX for the interactive frontend (no JS framework, no build step)
 - Jinja2 for server-rendered templates
-- SQLite for storage, behind a `MovieRepository` interface with two interchangeable backends — stdlib `sqlite3` and SQLAlchemy 2.0
+- Storage behind a `MovieRepository` interface with two interchangeable backends — stdlib `sqlite3` (SQLite, the default) and SQLAlchemy 2.0 (Postgres)
+- Postgres via psycopg v3, with Alembic for schema migrations
 - Pydantic for request/response validation
 - pytest for testing, with `pytest-cov` for coverage
 - ruff for lint and format
@@ -158,9 +159,9 @@ Adding or renaming a user requires a non-empty name and rejects duplicates with 
 The data layer sits behind a `MovieRepository` protocol (`app/storage/base.py`) declaring the five operations the routes use — `create`, `get`, `list_all`, `update`, `delete`. Two interchangeable backends implement it:
 
 - `SqliteMovieRepository` — stdlib `sqlite3`, with a hand-written schema and SQL.
-- `SqlAlchemyMovieRepository` — the same operations on the SQLAlchemy 2.0 ORM.
+- `SqlAlchemyMovieRepository` — the same operations on the SQLAlchemy 2.0 ORM, used for Postgres.
 
-Both persist to a SQLite file. `MOVIES_BACKEND` (`sqlite` or `sqlalchemy`, default `sqlite`) selects one at runtime, injected through `Depends(get_repository)`, so the routes never know which is in use. Lifecycle methods (`init_schema`, `reset`, `dispose`) live on the concrete classes, not the protocol — they're setup/teardown concerns, not route operations.
+`MOVIES_BACKEND` (`sqlite` or `postgres`, default `sqlite`) selects one at runtime, injected through `Depends(get_repository)`, so the routes never know which is in use. The `sqlite` backend persists to a local SQLite file; the `postgres` backend connects via `DATABASE_URL` and owns its schema through Alembic (see [Run against Postgres](#run-against-postgres)). Lifecycle methods (`init_schema`, `reset`, `dispose`) live on the concrete classes, not the protocol — they're setup/teardown concerns, not route operations.
 
 User management lives on the concrete repositories too, deliberately off the `MovieRepository` protocol: `ensure_user`, `create_user`, `get_user`, `rename_user`, and `list_users`. Movies are scoped to their owner via a `user_id` foreign key, and each repository is bound to one user at construction. `create_user`/`rename_user` raise `DuplicateUserName` on a name collision (the routes translate it to `409`). On startup, `init_storage` seeds a single user named "Default".
 
