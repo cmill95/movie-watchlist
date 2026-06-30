@@ -60,6 +60,26 @@ uv run fastapi dev app/main.py
 
 The app will be available at <http://127.0.0.1:8000>. FastAPI's auto-generated API docs are at <http://127.0.0.1:8000/docs>.
 
+### Run against Postgres
+
+The default backend is SQLite — a local file, no setup. To run against Postgres instead, start the bundled database, apply migrations, then point the app at it:
+
+```sh
+# start a local Postgres (docker compose; data persists in a named volume)
+just db-up
+
+# select the Postgres backend (copy the template, then edit the values below)
+cp .env.example .env
+#   MOVIES_BACKEND=postgres
+#   DATABASE_URL=postgresql+psycopg://movies:movies@localhost:5433/movies
+
+# apply migrations, then run the app
+just migrate
+just run
+```
+
+Unlike SQLite, the Postgres schema is **not** created on startup — Alembic owns it, applied by `just migrate` (`alembic upgrade head`). Booting against an unmigrated database fails loudly. After changing the ORM models, generate a migration with `just new-migration name="add something"` and review it before committing. Stop the database with `just db-down` (keeps data) or `just db-nuke` (deletes the volume).
+
 ### Run with Docker
 
 The app ships with a multi-stage `Dockerfile` (built on `python:3.14-slim`) that runs as a non-root user and includes a `HEALTHCHECK` against the `/health` endpoint.

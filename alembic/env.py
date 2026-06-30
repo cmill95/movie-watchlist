@@ -26,7 +26,13 @@ target_metadata = Base.metadata
 
 
 def _database_url() -> str:
-    return get_settings().database_url
+    url = get_settings().database_url
+    if not url:
+        raise RuntimeError(
+            "DATABASE_URL must be set to run migrations (they target Postgres). "
+            "Set MOVIES_BACKEND=postgres and DATABASE_URL in .env."
+        )
+    return url
 
 
 def run_migrations_offline() -> None:

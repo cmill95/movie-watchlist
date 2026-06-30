@@ -56,6 +56,14 @@ db-down:
 db-nuke:
     docker compose down -v
 
+# Apply migrations to bring the Postgres schema up to date (run before the app)
+migrate:
+    uv run alembic upgrade head
+
+# Autogenerate a migration from ORM model changes, e.g. `just new-migration name="add x"`
+new-migration name:
+    uv run alembic revision --autogenerate -m "{{name}}"
+
 # Remove caches and build artifacts
 clean:
     rm -rf .pytest_cache .ruff_cache htmlcov .coverage coverage.xml
