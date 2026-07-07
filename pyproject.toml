@@ -22,7 +22,7 @@ dev = [
     "pytest-cov>=5.0.0",
     "ruff>=0.15.18",
     "testcontainers>=4.0",
-    "ty>=0.0.52",
+    "ty>=0.0.56",
 ]
 
 [tool.ruff]
