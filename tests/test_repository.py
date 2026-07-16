@@ -141,6 +141,30 @@ def test_rename_unknown_user_returns_none(repo):
     assert repo.rename_user(9999, "Nobody") is None
 
 
+def test_create_user_without_password_has_no_hash(repo):
+    created = repo.create_user("Nolan")
+    assert created.has_password is False
+    assert repo.get_password_hash(created.id) is None
+
+
+def test_create_user_stores_password_hash(repo):
+    created = repo.create_user("Villeneuve", password_hash="hashed-secret")
+    assert created.has_password is True
+    assert repo.get_user(created.id).has_password is True
+    assert repo.get_password_hash(created.id) == "hashed-secret"
+
+
+def test_get_password_hash_unknown_user_returns_none(repo):
+    assert repo.get_password_hash(9999) is None
+
+
+def test_rename_preserves_password(repo):
+    created = repo.create_user("Denis", password_hash="hashed-secret")
+    renamed = repo.rename_user(created.id, "Denis V")
+    assert renamed.has_password is True
+    assert repo.get_password_hash(created.id) == "hashed-secret"
+
+
 def test_movies_are_scoped_to_owner(two_owners):
     alice, bob = two_owners
     a = alice.create(MovieCreate(title="Alice's"))

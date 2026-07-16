@@ -29,6 +29,9 @@ Rating = Annotated[int, Field(ge=1, le=10)]
 Notes = Annotated[str, Field(min_length=1, max_length=2000)]
 # Whitespace is trimmed first, so a blank or spaces-only name fails the min_length.
 Name = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)]
+# Not whitespace-stripped: spaces are legal password characters. The 72-char cap
+# keeps us inside bcrypt's 72-byte limit for ASCII (see app/security.py).
+Password = Annotated[str, Field(min_length=8, max_length=72)]
 
 
 class MovieCreate(BaseModel):
@@ -79,3 +82,6 @@ class User(BaseModel):
 
     id: int
     name: str
+    # Whether a password is required to switch to this user. The hash itself is
+    # never exposed on the read model.
+    has_password: bool = False

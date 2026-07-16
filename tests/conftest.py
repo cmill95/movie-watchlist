@@ -19,6 +19,7 @@ def pytest_configure(config):
     os.close(fd)
     os.environ["MOVIES_DB_PATH"] = db_path
     os.environ["MOVIES_BACKEND"] = "sqlite"
+    os.environ["SESSION_SECRET"] = "test-secret"
     os.environ.pop("DATABASE_URL", None)
 
 

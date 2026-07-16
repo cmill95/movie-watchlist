@@ -725,11 +725,11 @@ def test_no_cookie_uses_default_user(identity_client):
     assert identity_client.get(f"/movies/{created['id']}").status_code == 200
 
 
-def test_invalid_cookie_falls_back_to_default_user(identity_client):
+def test_unsigned_cookie_falls_back_to_default_user(identity_client):
+    # A forged/garbage user_id cookie isn't a valid signed session, so it's
+    # ignored and the request runs as the default user (who owns the movie).
     created = identity_client.post("/movies", json={"title": "Default's"}).json()
-    resp = identity_client.get(
-        f"/movies/{created['id']}", headers={"Cookie": "user_id=not-a-number"}
-    )
+    resp = identity_client.get(f"/movies/{created['id']}", headers={"Cookie": "user_id=2"})
     assert resp.status_code == 200
 
 
@@ -754,17 +754,20 @@ def test_lifespan_initializes_storage():
 # ============================================================================
 
 
-def test_switch_user_sets_cookie_and_redirects(identity_client):
+def test_switch_user_sets_session_and_redirects(identity_client):
     resp = identity_client.post("/ui/switch-user", data={"user_id": "2"})
     assert resp.headers["HX-Redirect"] == "/"
-    assert resp.cookies.get("user_id") == "2"
+    # The session is signed, so the cookie is opaque — assert behavior instead:
+    # a movie created next is owned by user 2 (Bob), the now-current user.
+    created = identity_client.post("/movies", json={"title": "Bob's"}).json()
+    assert created["user_id"] == 2
 
 
 def test_index_renders_user_switcher(identity_client):
     html = identity_client.get("/").text  # no cookie -> default user 1 (alice)
     assert "Alice" in html
     assert "Bob" in html
-    assert 'value="1" selected' in html
+    assert "selected>Alice" in html  # current user (1) is the selected option
 
 
 def test_index_renders_add_user_form(identity_client):
@@ -776,10 +779,11 @@ def test_index_renders_add_user_form(identity_client):
 def test_add_user_creates_and_switches_to_them(identity_client):
     resp = identity_client.post("/ui/users", data={"name": "Dana"})
     assert resp.headers["HX-Redirect"] == "/"
-    new_id = resp.cookies.get("user_id")
-    assert new_id is not None
-    # The new user is now selectable in the switcher.
+    # The new user is now selectable in the switcher...
     assert "Dana" in identity_client.get("/").text
+    # ...and is the current user: a new movie is owned by them, not the default.
+    created = identity_client.post("/movies", json={"title": "Dana's"}).json()
+    assert created["user_id"] not in (1, 2)
 
 
 def test_add_user_trims_and_requires_a_name(identity_client):
@@ -842,3 +846,58 @@ def test_rename_user_rejects_duplicate_name(identity_client):
 def test_rename_user_to_its_own_name_is_allowed(identity_client):
     resp = identity_client.patch("/ui/users/1", data={"name": "Alice"})
     assert resp.headers["HX-Redirect"] == "/"
+
+
+# ============================================================================
+# Tests for password-protected users
+# ============================================================================
+
+
+def test_add_user_with_password_gates_switching(identity_client):
+    # New password-protected user gets id 3 and becomes current.
+    identity_client.post("/ui/users", data={"name": "Carol", "password": "supersecret"})
+    # Move away to a password-less user.
+    identity_client.post("/ui/switch-user", data={"user_id": "1"})
+    # Switching back without a password is rejected.
+    assert identity_client.post("/ui/switch-user", data={"user_id": "3"}).status_code == 401
+    # Wrong password is rejected.
+    resp = identity_client.post("/ui/switch-user", data={"user_id": "3", "password": "nope"})
+    assert resp.status_code == 401
+    # Correct password succeeds and makes Carol current.
+    resp = identity_client.post("/ui/switch-user", data={"user_id": "3", "password": "supersecret"})
+    assert resp.headers["HX-Redirect"] == "/"
+    created = identity_client.post("/movies", json={"title": "Carol's"}).json()
+    assert created["user_id"] == 3
+
+
+def test_switch_to_passwordless_user_needs_no_password(identity_client):
+    # Bob (2) has no password, so switching is free (unchanged behavior).
+    resp = identity_client.post("/ui/switch-user", data={"user_id": "2"})
+    assert resp.headers["HX-Redirect"] == "/"
+
+
+def test_switch_to_unknown_user_returns_404(identity_client):
+    assert identity_client.post("/ui/switch-user", data={"user_id": "9999"}).status_code == 404
+
+
+def test_add_user_rejects_short_password(identity_client):
+    resp = identity_client.post("/ui/users", data={"name": "Eve", "password": "short"})
+    assert resp.status_code == 422
+
+
+def test_add_user_blank_password_creates_passwordless_user(identity_client):
+    # An empty password field posts as "" and must mean "no password", not a
+    # length error. The user (id 3) is then switchable without a password.
+    resp = identity_client.post("/ui/users", data={"name": "Frank", "password": ""})
+    assert resp.headers["HX-Redirect"] == "/"
+    identity_client.post("/ui/switch-user", data={"user_id": "1"})
+    assert identity_client.post("/ui/switch-user", data={"user_id": "3"}).status_code == 200
+
+
+def test_index_add_user_form_has_password_field(identity_client):
+    assert 'id="new-user-password"' in identity_client.get("/").text
+
+
+def test_switcher_marks_password_protected_users(identity_client):
+    identity_client.post("/ui/users", data={"name": "Grace", "password": "supersecret"})
+    assert 'data-has-password="true"' in identity_client.get("/").text

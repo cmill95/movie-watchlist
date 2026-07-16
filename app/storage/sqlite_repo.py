@@ -20,8 +20,9 @@ from app.storage.base import DuplicateUserName
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS users (
-    id     INTEGER PRIMARY KEY AUTOINCREMENT,
-    name   TEXT    NOT NULL
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    name           TEXT    NOT NULL,
+    password_hash  TEXT
 );
 
 CREATE TABLE IF NOT EXISTS movies (
@@ -79,9 +80,17 @@ class SqliteMovieRepository:
     # --- Lifecycle ---
 
     def init_schema(self) -> None:
-        """Create the movies table if absent."""
+        """Create the tables if absent, and backfill columns added later.
+
+        SQLite is the dev backend and isn't Alembic-managed (see the module
+        docstring), so schema evolution for an existing local movies.db happens
+        here. CREATE TABLE IF NOT EXISTS won't add a column to a table that
+        already exists, so we add password_hash explicitly when it's missing."""
         with contextlib.closing(self._connect()) as conn, conn:
             conn.executescript(_SCHEMA)
+            columns = {row["name"] for row in conn.execute("PRAGMA table_info(users)")}
+            if "password_hash" not in columns:
+                conn.execute("ALTER TABLE users ADD COLUMN password_hash TEXT")
 
     def reset(self) -> None:
         """Clear all movies and users and reset the id sequences. For tests.
@@ -97,18 +106,33 @@ class SqliteMovieRepository:
         with contextlib.closing(self._connect()) as conn, conn:
             conn.execute("INSERT OR IGNORE INTO users (id, name) VALUES (?, ?)", (user_id, name))
 
-    def create_user(self, name: str) -> User:
+    def create_user(self, name: str, password_hash: str | None = None) -> User:
         with contextlib.closing(self._connect()) as conn, conn:
             if conn.execute("SELECT 1 FROM users WHERE name = ?", (name,)).fetchone():
                 raise DuplicateUserName(name)
-            cursor = conn.execute("INSERT INTO users (name) VALUES (?)", (name,))
+            cursor = conn.execute(
+                "INSERT INTO users (name, password_hash) VALUES (?, ?)", (name, password_hash)
+            )
         assert cursor.lastrowid is not None  # INSERT always sets lastrowid
-        return User(id=cursor.lastrowid, name=name)
+        return User(id=cursor.lastrowid, name=name, has_password=password_hash is not None)
 
     def get_user(self, user_id: int) -> User | None:
         with contextlib.closing(self._connect()) as conn:
-            row = conn.execute("SELECT id, name FROM users WHERE id = ?", (user_id,)).fetchone()
-        return User(id=row["id"], name=row["name"]) if row is not None else None
+            row = conn.execute(
+                "SELECT id, name, password_hash FROM users WHERE id = ?", (user_id,)
+            ).fetchone()
+        if row is None:
+            return None
+        return User(id=row["id"], name=row["name"], has_password=row["password_hash"] is not None)
+
+    def get_password_hash(self, user_id: int) -> str | None:
+        """The stored bcrypt hash, or None if the user is password-less/absent.
+        See the SQLAlchemy backend for the None-collapsing caveat."""
+        with contextlib.closing(self._connect()) as conn:
+            row = conn.execute(
+                "SELECT password_hash FROM users WHERE id = ?", (user_id,)
+            ).fetchone()
+        return row["password_hash"] if row is not None else None
 
     def rename_user(self, user_id: int, name: str) -> User | None:
         with contextlib.closing(self._connect()) as conn, conn:
@@ -119,12 +143,20 @@ class SqliteMovieRepository:
             cursor = conn.execute("UPDATE users SET name = ? WHERE id = ?", (name, user_id))
             if cursor.rowcount == 0:
                 return None
-        return User(id=user_id, name=name)
+            row = conn.execute(
+                "SELECT password_hash FROM users WHERE id = ?", (user_id,)
+            ).fetchone()
+        return User(id=user_id, name=name, has_password=row["password_hash"] is not None)
 
     def list_users(self) -> list[User]:
         with contextlib.closing(self._connect()) as conn:
-            rows = conn.execute("SELECT id, name FROM users ORDER BY id ASC").fetchall()
-        return [User(id=row["id"], name=row["name"]) for row in rows]
+            rows = conn.execute(
+                "SELECT id, name, password_hash FROM users ORDER BY id ASC"
+            ).fetchall()
+        return [
+            User(id=row["id"], name=row["name"], has_password=row["password_hash"] is not None)
+            for row in rows
+        ]
 
     # --- MovieRepository protocol
 

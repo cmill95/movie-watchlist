@@ -26,6 +26,7 @@ class UserORM(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str]
+    password_hash: Mapped[str | None] = mapped_column(default=None)
 
 
 class MovieORM(Base):
@@ -49,6 +50,10 @@ def _now() -> datetime:
 def _ensure_utc(dt: datetime) -> datetime:
     # SQLite has no native datetime type, so timezone might not persist
     return dt if dt.tzinfo is not None else dt.replace(tzinfo=UTC)
+
+
+def _to_user(user: UserORM) -> User:
+    return User(id=user.id, name=user.name, has_password=user.password_hash is not None)
 
 
 def _to_read(movie: MovieORM) -> MovieRead:
@@ -116,19 +121,29 @@ class SqlAlchemyMovieRepository:
             )
         )
 
-    def create_user(self, name: str) -> User:
+    def create_user(self, name: str, password_hash: str | None = None) -> User:
         with self._sessions() as session:
             if session.scalar(select(UserORM).where(UserORM.name == name)) is not None:
                 raise DuplicateUserName(name)
-            user = UserORM(name=name)
+            user = UserORM(name=name, password_hash=password_hash)
             session.add(user)
             session.commit()
-            return User.model_validate(user)
+            return _to_user(user)
 
     def get_user(self, user_id: int) -> User | None:
         with self._sessions() as session:
             user = session.get(UserORM, user_id)
-            return User.model_validate(user) if user is not None else None
+            return _to_user(user) if user is not None else None
+
+    def get_password_hash(self, user_id: int) -> str | None:
+        """The stored bcrypt hash, or None if the user is password-less/absent.
+
+        Callers must not treat a None return as 'user exists but no password'
+        without a separate existence check; here both collapse to None because
+        only switch_user uses this, and it has already confirmed the user."""
+        with self._sessions() as session:
+            user = session.get(UserORM, user_id)
+            return user.password_hash if user is not None else None
 
     def rename_user(self, user_id: int, name: str) -> User | None:
         with self._sessions() as session:
@@ -142,12 +157,12 @@ class SqlAlchemyMovieRepository:
                 return None
             user.name = name
             session.commit()
-            return User.model_validate(user)
+            return _to_user(user)
 
     def list_users(self) -> list[User]:
         with self._sessions() as session:
             users = session.scalars(select(UserORM).order_by(UserORM.id)).all()
-            return [User.model_validate(user) for user in users]
+            return [_to_user(user) for user in users]
 
     # --- MovieRepository protocol ---
 

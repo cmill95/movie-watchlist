@@ -3,18 +3,29 @@
 {% block content %}
 <header>
   <h1>Movie Watchlist</h1>
-  <label for="user-switcher">Viewing as</label>
-  <select id="user-switcher" name="user_id"
-          hx-post="/ui/switch-user" hx-trigger="change">
-    {% for user in users %}
-      <option value="{{ user.id }}" {% if user.id == current_user_id %}selected{% endif %}>{{ user.name }}</option>
-    {% endfor %}
-  </select>
+  <form id="switch-user-form" hx-post="/ui/switch-user" hx-trigger="submit"
+        hx-target="#switch-error" hx-swap="innerHTML">
+    <label for="user-switcher">Viewing as</label>
+    <select id="user-switcher" name="user_id">
+      {% for user in users %}
+        <option value="{{ user.id }}"
+                data-has-password="{{ 'true' if user.has_password else 'false' }}"
+                {% if user.id == current_user_id %}selected{% endif %}>{{ user.name }}</option>
+      {% endfor %}
+    </select>
+    <input id="switch-password" name="password" type="password"
+           placeholder="Password" autocomplete="current-password" hidden>
+    <button id="switch-submit" type="submit" hidden>Switch</button>
+    <span id="switch-error" role="alert" class="error"></span>
+  </form>
   {% set current_user = users | selectattr("id", "equalto", current_user_id) | first %}
   {% if current_user %}{% include "_user_name.html" %}{% endif %}
   <form id="add-user-form" hx-post="/ui/users" hx-trigger="submit">
     <label for="new-user-name">Add user</label>
     <input id="new-user-name" name="name" type="text" maxlength="100" required>
+    <input id="new-user-password" name="password" type="password"
+           placeholder="Password (optional)" autocomplete="new-password"
+           minlength="8" maxlength="72">
     <button type="submit">Add</button>
   </form>
 </header>
@@ -44,4 +55,46 @@
     </tbody>
   </table>
 </section>
+
+<script>
+  (function () {
+    const form = document.getElementById("switch-user-form");
+    const select = document.getElementById("user-switcher");
+    const password = document.getElementById("switch-password");
+    const submit = document.getElementById("switch-submit");
+    const error = document.getElementById("switch-error");
+    const currentId = "{{ current_user_id }}";
+
+    function reset() {
+      password.hidden = true;
+      submit.hidden = true;
+      password.value = "";
+      error.textContent = "";
+    }
+
+    select.addEventListener("change", function () {
+      reset();
+      const option = select.selectedOptions[0];
+      if (!option || option.value === currentId) return;
+      if (option.dataset.hasPassword === "true") {
+        // Protected user: reveal the password field and let the user submit.
+        password.hidden = false;
+        submit.hidden = false;
+        password.focus();
+      } else {
+        // Password-less user: switch immediately, as before.
+        form.requestSubmit();
+      }
+    });
+
+    // HTMX doesn't swap on 4xx, so surface the login failure ourselves.
+    form.addEventListener("htmx:responseError", function (event) {
+      if (event.detail.xhr.status === 401) {
+        error.textContent = "Incorrect password";
+        password.focus();
+        password.select();
+      }
+    });
+  })();
+</script>
 {% endblock %}
