@@ -3,12 +3,15 @@
 from contextlib import asynccontextmanager
 from typing import Annotated
 
-from fastapi import Cookie, Depends, FastAPI, Form, HTTPException, Request
+from fastapi import Depends, FastAPI, Form, HTTPException, Request
 from fastapi import status as http_status
 from fastapi.responses import HTMLResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from pydantic import TypeAdapter, ValidationError
+from starlette.middleware.sessions import SessionMiddleware
 
+from app.config import get_settings
 from app.models import (
     MovieCreate,
     MovieRead,
@@ -16,11 +19,13 @@ from app.models import (
     MovieUpdate,
     Name,
     Notes,
+    Password,
     Rating,
     Title,
     User,
     Year,
 )
+from app.security import hash_password, verify_password
 from app.storage import (
     DEFAULT_USER_ID,
     DuplicateUserName,
@@ -29,6 +34,10 @@ from app.storage import (
     init_storage,
     make_repository,
 )
+
+# Validates a submitted password against the Password constraints (length),
+# reusing the model definition rather than duplicating the bounds in the route.
+_password_adapter = TypeAdapter(Password)
 
 
 @asynccontextmanager
@@ -40,14 +49,13 @@ async def lifespan(app: FastAPI):
     # Shutdown: nothing to clean up for SQLite (connections are per-request).
 
 
-def get_current_user(user_id: Annotated[str | None, Cookie()] = None) -> int:
-    """Current user id from the `user_id` cookie. Unverified at this point."""
-    if user_id is None:
-        return DEFAULT_USER_ID
-    try:
-        return int(user_id)
-    except ValueError:
-        return DEFAULT_USER_ID
+def get_current_user(request: Request) -> int:
+    """Current user id from the signed session, or the default user if none.
+
+    The session cookie is signed (SessionMiddleware), so the id can't be forged;
+    it's only ever written by switch_user/add_user after any password check."""
+    user_id = request.session.get("user_id")
+    return user_id if isinstance(user_id, int) else DEFAULT_USER_ID
 
 
 def get_repository(user_id: Annotated[int, Depends(get_current_user)]) -> MovieRepository:
@@ -59,6 +67,7 @@ def get_users() -> list[User]:
 
 
 app = FastAPI(title="Movie Watchlist", version="0.1.0", lifespan=lifespan)
+app.add_middleware(SessionMiddleware, secret_key=get_settings().session_secret)
 
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 templates = Jinja2Templates(directory="app/templates")
@@ -89,23 +98,50 @@ def index(
 
 
 @app.post("/ui/switch-user")
-def switch_user(user_id: Annotated[int, Form()]) -> Response:
-    response = Response(headers={"HX-Redirect": "/"})
-    response.set_cookie("user_id", str(user_id))
-    return response
+def switch_user(
+    request: Request,
+    user_id: Annotated[int, Form()],
+    # Raw string, not the Password type: a wrong login shouldn't fail validation
+    # (422) on length — it should fail the password check (401).
+    password: Annotated[str | None, Form()] = None,
+) -> Response:
+    admin = make_repository(DEFAULT_USER_ID)
+    user = admin.get_user(user_id)
+    if user is None:
+        raise HTTPException(http_status.HTTP_404_NOT_FOUND, detail="User not found")
+    if user.has_password:
+        stored = admin.get_password_hash(user_id)
+        if stored is None or password is None or not verify_password(password, stored):
+            raise HTTPException(http_status.HTTP_401_UNAUTHORIZED, detail="Incorrect password")
+    request.session["user_id"] = user_id
+    return Response(headers={"HX-Redirect": "/"})
 
 
 @app.post("/ui/users")
-def add_user(name: Annotated[Name, Form()]) -> Response:
+def add_user(
+    request: Request,
+    name: Annotated[Name, Form()],
+    # Optional: an empty field arrives as "" (not absent), so treat blank as
+    # "no password". A non-blank value is validated against the Password type.
+    password: Annotated[str | None, Form()] = None,
+) -> Response:
+    password_hash = None
+    if password:
+        try:
+            valid = _password_adapter.validate_python(password)
+        except ValidationError as exc:
+            raise HTTPException(
+                http_status.HTTP_422_UNPROCESSABLE_ENTITY, detail=exc.errors()
+            ) from None
+        password_hash = hash_password(valid)
     try:
-        user = make_repository(DEFAULT_USER_ID).create_user(name)
+        user = make_repository(DEFAULT_USER_ID).create_user(name, password_hash=password_hash)
     except DuplicateUserName:
         raise HTTPException(
             http_status.HTTP_409_CONFLICT, detail="That name is already taken"
         ) from None
-    response = Response(headers={"HX-Redirect": "/"})
-    response.set_cookie("user_id", str(user.id))
-    return response
+    request.session["user_id"] = user.id
+    return Response(headers={"HX-Redirect": "/"})
 
 
 @app.get("/ui/users/{user_id}", response_class=HTMLResponse)
