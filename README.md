@@ -7,7 +7,7 @@
 
 A small FastAPI + HTMX app for tracking movies you want to watch and movies you've watched. Each movie has a title, optional year, status (to-watch or watched), optional 1-10 rating, and optional notes. Data is persisted in SQLite by default, with Postgres available as an alternative backend (see [Run against Postgres](#run-against-postgres)).
 
-The app is multi-user: each user keeps their own watchlist. It ships with a single user named "Default"; from the UI you can switch users, add a new user (a name is required and must be unique), and rename the current user. The active user is tracked in a `user_id` cookie.
+The app is multi-user: each user keeps their own watchlist. It ships with a single user named "Default"; from the UI you can switch users, add a new user (a name is required and must be unique, with an optional password), and rename the current user. A user created with a password must supply it to switch to them; password-less users (including Default) switch freely. The active user is tracked in a signed session cookie, which is signed with `SESSION_SECRET` — the bundled default is fine for local dev but must be overridden in production (see `.env.example`).
 
 
 ## Stack
@@ -19,6 +19,7 @@ The app is multi-user: each user keeps their own watchlist. It ships with a sing
 - Storage behind a `MovieRepository` interface with two interchangeable backends — stdlib `sqlite3` (SQLite, the default) and SQLAlchemy 2.0 (Postgres)
 - Postgres via psycopg v3, with Alembic for schema migrations
 - Pydantic for request/response validation
+- bcrypt for password hashing, with the active user tracked in a signed session cookie (via `itsdangerous`)
 - pytest for testing, with `pytest-cov` for coverage
 - ruff for lint and format
 - pre-commit for local commit-time checks
@@ -146,13 +147,13 @@ These return HTML fragments and are consumed by the browser UI, not intended for
 | GET    | `/ui/movies/{movie_id}/edit`  | Movie row (edit mode)            |
 | PATCH  | `/ui/movies/{movie_id}`       | Movie row (read mode)            |
 | DELETE | `/ui/movies/{movie_id}`       | Empty 200 response               |
-| POST   | `/ui/switch-user`             | Sets `user_id` cookie, redirects |
-| POST   | `/ui/users`                   | Adds a user, switches to them    |
+| POST   | `/ui/switch-user`             | Switches user (password required if the user has one), redirects |
+| POST   | `/ui/users`                   | Adds a user (optional password), switches to them |
 | GET    | `/ui/users/{user_id}`         | Current-user name (read mode)    |
 | GET    | `/ui/users/{user_id}/edit`    | Current-user name (edit mode)    |
 | PATCH  | `/ui/users/{user_id}`         | Renames the user, redirects      |
 
-Adding or renaming a user requires a non-empty name and rejects duplicates with `409 Conflict`.
+Adding or renaming a user requires a non-empty name and rejects duplicates with `409 Conflict`. A password is optional when adding a user (minimum 8 characters); switching to a user that has one requires the correct password, otherwise the switch is rejected with `401 Unauthorized`.
 
 ## Storage
 
@@ -163,7 +164,7 @@ The data layer sits behind a `MovieRepository` protocol (`app/storage/base.py`) 
 
 `MOVIES_BACKEND` (`sqlite` or `postgres`, default `sqlite`) selects one at runtime, injected through `Depends(get_repository)`, so the routes never know which is in use. The `sqlite` backend persists to a local SQLite file; the `postgres` backend connects via `DATABASE_URL` and owns its schema through Alembic (see [Run against Postgres](#run-against-postgres)). Lifecycle methods (`init_schema`, `reset`, `dispose`) live on the concrete classes, not the protocol — they're setup/teardown concerns, not route operations.
 
-User management lives on the concrete repositories too, deliberately off the `MovieRepository` protocol: `ensure_user`, `create_user`, `get_user`, `rename_user`, and `list_users`. Movies are scoped to their owner via a `user_id` foreign key, and each repository is bound to one user at construction. `create_user`/`rename_user` raise `DuplicateUserName` on a name collision (the routes translate it to `409`). On startup, `init_storage` seeds a single user named "Default".
+User management lives on the concrete repositories too, deliberately off the `MovieRepository` protocol: `ensure_user`, `create_user`, `get_user`, `get_password_hash`, `rename_user`, and `list_users`. Movies are scoped to their owner via a `user_id` foreign key, and each repository is bound to one user at construction. `create_user`/`rename_user` raise `DuplicateUserName` on a name collision (the routes translate it to `409`). A user may optionally have a password: `create_user` stores a bcrypt hash in the users table's nullable `password_hash` column (the hashing itself lives in `app/security.py`), and `get_password_hash` fetches it so the switch-user route can verify a login. On startup, `init_storage` seeds a single user named "Default" (with no password).
 
 ### Notes on building both backends
 
