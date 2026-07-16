@@ -31,3 +31,21 @@ CVE-2026-54369 exp:2026-09-01
 
 # attr symlink traversal privilege escalation — libattr1 (no fix yet)
 CVE-2026-54371 exp:2026-09-01
+
+# util-linux integer overflow in libblkid/src/partitions/dos.c — affects
+# bsdutils, libblkid1, liblastlog2-2, libmount1, libsmartcols1, libuuid1,
+# login, mount, util-linux (2.41-5). We never parse untrusted DOS partition
+# tables; no fix yet.
+CVE-2026-53615 exp:2026-09-01
+
+# gzip global buffer overflow in the LZH decoder (1.13-1). App does not
+# decompress untrusted .lzh archives; no fix yet.
+CVE-2026-41992 exp:2026-09-01
+
+# perl silently incorrect regex results through 5.43.9 (CRITICAL) — perl-base
+# 5.40.1-6, no fix yet.
+CVE-2026-13221 exp:2026-09-01
+
+# perl integer overflow in S_measure_st* through 5.43.10 — perl-base
+# 5.40.1-6, no fix yet.
+CVE-2026-57432 exp:2026-09-01
