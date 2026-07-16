@@ -11,6 +11,9 @@ class Settings(BaseSettings):
     movies_db_path: str = "movies.db"
     movies_backend: Literal["sqlite", "postgres"] = "sqlite"
     database_url: str = ""
+    # Signs the session cookie. The default is fine for local dev; production
+    # MUST override it (a known key lets anyone forge a session).
+    session_secret: str = "dev-insecure-change-me"
 
     @model_validator(mode="after")
     def _require_database_url_for_postgres(self) -> Self:
