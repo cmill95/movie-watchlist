@@ -49,3 +49,4 @@ CVE-2026-13221 exp:2026-09-01
 # perl integer overflow in S_measure_st* through 5.43.10 — perl-base
 # 5.40.1-6, no fix yet.
 CVE-2026-57432 exp:2026-09-01
+CVE-2026-57433 exp: exp:2026-09-01
