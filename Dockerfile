@@ -1,5 +1,5 @@
 # ---- Stage 1: builder ----
-FROM python:3.14-slim AS builder
+FROM python:3.15-slim AS builder
 
 # uv only needs to exist here, in the builder
 COPY --from=ghcr.io/astral-sh/uv:0.5.11 /uv /uvx /bin/
@@ -12,7 +12,7 @@ COPY . .
 RUN uv sync --frozen --no-dev
 
 # ---- Stage 2: runtime ----
-FROM python:3.14-slim AS runtime
+FROM python:3.15-slim AS runtime
 
 # Create an unprivileged user with a fixed, predictable UID
 RUN useradd -m -u 1000 app
